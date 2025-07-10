@@ -16,7 +16,7 @@ class UserCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
+          color: Colors.white.withOpacity(0.5),
           borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(8),

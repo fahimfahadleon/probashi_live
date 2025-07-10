@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:probashi_live/ui/profile_tab_view.dart';
 import 'package:probashi_live/ui/shorts_tab_view.dart';
 import 'package:probashi_live/ui/video_tab_view.dart';
+import '../utils/socket_service.dart';
 import 'home_tab_view.dart';
+import 'live_page.dart';
 import 'message_tab_view.dart';
 
 class HomePage extends StatefulWidget {
@@ -14,6 +17,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedBottomNavIndex = 0;
+  final socketService = SocketService();
 
   final List<Widget> _pages = const [
     HomeTabView(),
@@ -22,6 +26,17 @@ class _HomePageState extends State<HomePage> {
     MessageTabView(),
     ProfileTabView(),
   ];
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    _initSocket();
+
+  }
+  Future<void> _initSocket() async {
+    final token = await FlutterSecureStorage().read(key: 'access_token');
+    socketService.connect(token!);
+  }
 
   void _onBottomNavTap(int index) {
     setState(() {
@@ -34,7 +49,7 @@ class _HomePageState extends State<HomePage> {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+          colors: [Color(0xFFDCB3FF), Color(0xFFB3E5FC)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -65,7 +80,14 @@ class _HomePageState extends State<HomePage> {
           floatingActionButtonLocation:
               FloatingActionButtonLocation.centerDocked,
           floatingActionButton: FloatingActionButton(
-            onPressed: () => _onBottomNavTap(2),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const LivePage(rtmpUrl: "rtmp://192.168.11.2:1935/live/test"),
+                ),
+              );
+            },
             shape: const CircleBorder(),
             backgroundColor: Colors.amberAccent,
             child: const Icon(Icons.videocam, color: Colors.black),

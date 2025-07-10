@@ -5,6 +5,7 @@ import 'package:probashi_live/ui/home_page.dart';
 import 'package:probashi_live/ui/social_login_page.dart';
 
 void main() {
+  initGoogleSignIn();
   runApp(const MyApp());
 }
 

@@ -62,3 +62,7 @@ android {
 flutter {
     source = "../.."
 }
+dependencies {
+    implementation("com.github.NodeMedia:NodeMediaClient-Android:3.2.9")
+    // other dependencies...
+}

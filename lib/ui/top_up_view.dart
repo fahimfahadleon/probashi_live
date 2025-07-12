@@ -79,9 +79,9 @@ class _TopUpViewState extends State<TopUpView> {
   }
 
   void _showPaymentDialog(BuildContext context, VIPDiamondPack pack) {
-    final _txnIdController = TextEditingController();
-    final _methodController = TextEditingController();
-    final _descController = TextEditingController();
+    final txnIdController = TextEditingController();
+    final methodController = TextEditingController();
+    final descController = TextEditingController();
 
     bool isLoading = false;
 
@@ -106,15 +106,15 @@ class _TopUpViewState extends State<TopUpView> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
-                      controller: _txnIdController,
+                      controller: txnIdController,
                       decoration: InputDecoration(labelText: 'Transaction ID'),
                     ),
                     TextField(
-                      controller: _methodController,
+                      controller: methodController,
                       decoration: InputDecoration(labelText: 'Payment Method'),
                     ),
                     TextField(
-                      controller: _descController,
+                      controller: descController,
                       decoration: InputDecoration(labelText: 'Description (optional)'),
                     ),
                     if (isLoading)
@@ -135,9 +135,9 @@ class _TopUpViewState extends State<TopUpView> {
                 onPressed: isLoading
                     ? null
                     : () async {
-                  final txn = _txnIdController.text.trim();
-                  final method = _methodController.text.trim();
-                  final desc = _descController.text.trim();
+                  final txn = txnIdController.text.trim();
+                  final method = methodController.text.trim();
+                  final desc = descController.text.trim();
 
                   if (txn.isEmpty || method.isEmpty) {
                     Utils.showToast(context, "Transaction ID and Payment Method are required");

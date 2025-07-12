@@ -1,309 +1,352 @@
 import 'package:flutter/material.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:flutter/services.dart';
 
-// Simplified Dart models for demo
-class LiveUser {
-  final String id;
-  final String name;
-  final bool isHost;
-  final String profilePicUrl;
+import '../services/generic_system_service.dart';
+import '../utils/socket_service.dart';
+import '../utils/variables.dart';
 
-  LiveUser({
-    required this.id,
-    required this.name,
-    this.isHost = false,
-    this.profilePicUrl = '',
-  });
+class LivePage extends StatefulWidget {
+  const LivePage({super.key});
 
-  factory LiveUser.fromJson(Map<String, dynamic> json) => LiveUser(
-    id: json['id'],
-    name: json['name'],
-    isHost: json['isHost'] ?? false,
-    profilePicUrl: json['profilePicUrl'] ?? '',
-  );
+  @override
+  State<LivePage> createState() => _LivePageState();
 }
 
-class LiveComment {
-  final String id;
-  final LiveUser user;
-  final String message;
-  final DateTime createdAt;
+class _LivePageState extends State<LivePage> {
+  bool isStreaming = false;
+  bool isMicOn = true;
+  bool isCameraOn = true;
+  bool isFrontCamera = true;
+  bool _dialogShown = false;
+  bool showControlsPanel = false;
 
-  LiveComment({
-    required this.id,
-    required this.user,
-    required this.message,
-    required this.createdAt,
-  });
+  final TextEditingController _chatController = TextEditingController();
+  final List<Map<String, dynamic>> comments = [];
 
-  factory LiveComment.fromJson(Map<String, dynamic> json) => LiveComment(
-    id: json['id'],
-    user: LiveUser.fromJson(json['user']),
-    message: json['message'],
-    createdAt: DateTime.parse(json['createdAt']),
-  );
-}
+  int viewerCount = 0; // Update dynamically as needed
+  String streamerName = "Streamer"; // Update dynamically as needed
 
-class LiveSession {
-  final String id;
-  final List<LiveUser> hosts;
-  final List<LiveUser> participants;
-  final List<LiveComment> comments;
-
-  LiveSession({
-    required this.id,
-    this.hosts = const [],
-    this.participants = const [],
-    this.comments = const [],
-  });
-
-  LiveSession copyWith({
-    List<LiveUser>? hosts,
-    List<LiveUser>? participants,
-    List<LiveComment>? comments,
-  }) {
-    return LiveSession(
-      id: id,
-      hosts: hosts ?? this.hosts,
-      participants: participants ?? this.participants,
-      comments: comments ?? this.comments,
-    );
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_dialogShown) {
+      _dialogShown = true;
+      Future.delayed(Duration.zero, () => _showConfirmationDialog());
+    }
   }
-}
 
-class LiveView extends StatefulWidget {
-  final String sessionId;
-  final String socketUrl; // e.g. https://your-backend.com
+  Future<void> _showConfirmationDialog() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("Start Live Stream?"),
+        content: const Text("Do you want to go live now?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("No"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Yes"),
+          ),
+        ],
+      ),
+    );
 
-  const LiveView({
-    super.key,
-    required this.sessionId,
-    required this.socketUrl,
-  });
+    if (confirm == true) {
+      final rtmpUrl = "${Variables.RTMP_URL}/${SocketService.instance.userId}";
+      print("RTMP URL: $rtmpUrl");
 
-  @override
-  State<LiveView> createState() => _LiveViewState();
-}
-
-class _LiveViewState extends State<LiveView> {
-  late IO.Socket socket;
-  late LiveSession session;
-
-  @override
-  void initState() {
-    super.initState();
-
-    session = LiveSession(id: widget.sessionId);
-
-    socket = IO.io(widget.socketUrl, <String, dynamic>{
-      'transports': ['websocket'],
-      'autoConnect': false,
-    });
-
-    socket.connect();
-
-    socket.onConnect((_) {
-      print('Socket connected');
-      socket.emit('join_session', {'sessionId': widget.sessionId});
-    });
-
-    socket.on('hosts_update', (data) {
-      final hosts = (data as List).map((e) => LiveUser.fromJson(e)).toList();
+      GenericStreamService.startStream(rtmpUrl);
+      SocketService.instance.goLive();
       setState(() {
-        session = session.copyWith(hosts: hosts);
+        isStreaming = true;
       });
-    });
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
 
-    socket.on('participants_update', (data) {
-      final participants = (data as List).map((e) => LiveUser.fromJson(e)).toList();
-      setState(() {
-        session = session.copyWith(participants: participants);
-      });
-    });
+  Future<void> _confirmEndStream() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("End Live Stream"),
+        content: const Text("Are you sure you want to end the live stream?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("End"),
+          ),
+        ],
+      ),
+    );
 
-    socket.on('new_comment', (data) {
-      final comment = LiveComment.fromJson(data);
-      setState(() {
-        session = session.copyWith(comments: [comment, ...session.comments]);
-      });
-    });
-
-    socket.onDisconnect((_) {
-      print('Socket disconnected');
-    });
+    if (confirm == true) {
+      _endStream();
+    }
   }
 
   @override
   void dispose() {
-    socket.disconnect();
-    socket.dispose();
+    if (isStreaming) {
+      GenericStreamService.stopStream();
+      SocketService.instance.leaveLive();
+    }
+    _chatController.dispose();
     super.dispose();
   }
 
-  Widget _buildUserPreview(LiveUser user, {double size = 100}) {
-    return Container(
-      width: size,
-      height: size,
-      margin: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        border: Border.all(color: user.isHost ? Colors.amber : Colors.white),
-        borderRadius: BorderRadius.circular(8),
-        image: DecorationImage(
-          image: user.profilePicUrl.isNotEmpty
-              ? NetworkImage(user.profilePicUrl)
-              : const AssetImage('assets/default_avatar.png') as ImageProvider,
-          fit: BoxFit.cover,
-        ),
-      ),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Container(
-          color: Colors.black54,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Text(
-            user.name,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ),
-    );
+  void _toggleMic() async {
+    isMicOn = !isMicOn;
+    isMicOn ? await GenericStreamService.unmute() : await GenericStreamService.mute();
+    setState(() {});
   }
 
-  Widget _buildHostsRow() {
-    final hosts = session.hosts;
-    if (hosts.isEmpty) {
-      return const SizedBox.shrink();
+  void _toggleCamera() {
+    isCameraOn = !isCameraOn;
+    setState(() {});
+  }
+
+  void _switchCamera() async {
+    isFrontCamera = !isFrontCamera;
+    await GenericStreamService.switchCamera();
+    setState(() {});
+  }
+
+  void _endStream() {
+    GenericStreamService.stopStream();
+    SocketService.instance.leaveLive();
+    Navigator.pop(context);
+  }
+
+  void _sendComment() {
+    final msg = _chatController.text.trim();
+    if (msg.isNotEmpty) {
+      SocketService.instance.sendComment(msg);
+      _chatController.clear();
     }
-    if (hosts.length == 1) {
-      return Center(
-        child: _buildUserPreview(hosts[0], size: 300),
-      );
-    }
-    // two hosts side by side
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: hosts
-          .map((host) => _buildUserPreview(host, size: 150))
-          .toList(),
-    );
   }
 
-  Widget _buildParticipantsGrid() {
-    final participants = session.participants;
-    if (participants.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    // Grid of participants with 4 per row
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: participants.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        mainAxisSpacing: 4,
-        crossAxisSpacing: 4,
-        childAspectRatio: 1 / 1.5,
-      ),
-      itemBuilder: (context, index) {
-        return _buildUserPreview(participants[index], size: 100);
-      },
-    );
-  }
-
-  Widget _buildCommentsList() {
-    final comments = session.comments;
-    return ListView.separated(
-      shrinkWrap: true,
-      reverse: true,
-      itemCount: comments.length,
-      separatorBuilder: (_, __) => const Divider(color: Colors.grey),
-      itemBuilder: (context, index) {
-        final comment = comments[index];
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundImage: comment.user.profilePicUrl.isNotEmpty
-                ? NetworkImage(comment.user.profilePicUrl)
-                : const AssetImage('assets/default_avatar.png') as ImageProvider,
-          ),
-          title: Text(comment.user.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text(comment.message),
-          trailing: Text(
-            _formatTime(comment.createdAt),
-            style: const TextStyle(fontSize: 10, color: Colors.grey),
-          ),
-        );
-      },
-    );
-  }
-
-  String _formatTime(DateTime time) {
-    final diff = DateTime.now().difference(time);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
+  void _toggleControlsPanel() {
+    setState(() {
+      showControlsPanel = !showControlsPanel;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardHeight = mediaQuery.viewInsets.bottom;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text('Live Session: ${session.id}'),
-        backgroundColor: Colors.black,
-      ),
-      body: Column(
+      resizeToAvoidBottomInset: false, // Prevent whole scaffold from resizing
+      body: Stack(
         children: [
-          // Hosts preview row
-          SizedBox(
-            height: 320,
-            child: _buildHostsRow(),
-          ),
-
-          // Participants grid
-          Expanded(
-            child: _buildParticipantsGrid(),
-          ),
-
-          // Comments section
-          Container(
-            height: 200,
-            color: Colors.black87,
-            child: _buildCommentsList(),
-          ),
-
-          // Input & action row placeholder
-          Container(
-            color: Colors.black,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      hintText: 'Write a comment...',
-                      hintStyle: TextStyle(color: Colors.white60),
-                      border: InputBorder.none,
-                    ),
-                    onSubmitted: (text) {
-                      // TODO: send comment to socket
-                      if (text.trim().isNotEmpty) {
-                        socket.emit('send_comment', {'sessionId': session.id, 'message': text});
-                      }
-                    },
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.white),
-                  onPressed: () {
-                    // TODO: implement sending comment on button press
-                  },
-                ),
-              ],
+          SizedBox.expand(
+            child: const AndroidView(
+              viewType: 'generic_stream_view',
+              layoutDirection: TextDirection.ltr,
+              creationParams: {},
+              creationParamsCodec: StandardMessageCodec(),
             ),
           ),
+          if (isStreaming) ...[
+            Positioned(
+              top: 40,
+              right: 16,
+              left: 16,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          streamerName,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.remove_red_eye,
+                            color: Colors.white, size: 18),
+                        const SizedBox(width: 4),
+                        Text(
+                          viewerCount.toString(),
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                    onPressed: _confirmEndStream,
+                  ),
+                ],
+              ),
+            ),
+            if (showControlsPanel)
+              Positioned(
+                bottom: 120,
+                left: 8,
+                right: 8,
+                child: Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white38),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      IconButton(
+                        onPressed: _switchCamera,
+                        icon:
+                        const Icon(Icons.cameraswitch, color: Colors.white),
+                        tooltip: "Switch Camera",
+                      ),
+                      IconButton(
+                        onPressed: _toggleCamera,
+                        icon: Icon(
+                            isCameraOn ? Icons.videocam : Icons.videocam_off,
+                            color: Colors.white),
+                        tooltip: "Toggle Camera",
+                      ),
+                      IconButton(
+                        onPressed: _toggleMic,
+                        icon:
+                        Icon(isMicOn ? Icons.mic : Icons.mic_off, color: Colors.white),
+                        tooltip: "Toggle Mic",
+                      ),
+                      IconButton(
+                        onPressed: () {
+                          // Invite users functionality here
+                        },
+                        icon: const Icon(Icons.group_add, color: Colors.white),
+                        tooltip: "Add People",
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: keyboardHeight, // Move up by keyboard height only
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: mediaQuery.size.height * 0.5 - 60,
+                    padding: const EdgeInsets.all(8),
+                    alignment: Alignment.topLeft,
+                    color: Colors.transparent, // fully transparent
+                    child: ListView.builder(
+                      reverse: true,
+                      shrinkWrap: true,
+                      itemCount: comments.length,
+                      itemBuilder: (context, index) {
+                        final comment = comments[comments.length - 1 - index];
+                        final userName = comment['user']?['name'] ?? "User";
+                        final message = comment['message'] ?? "";
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: RichText(
+                            text: TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: "$userName: ",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: message,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  Container(
+                    color: Colors.black54,
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _chatController,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: "Type a comment...",
+                              hintStyle:
+                              const TextStyle(color: Colors.grey),
+                              filled: true,
+                              fillColor: Colors.black38,
+                              border: OutlineInputBorder(
+                                borderRadius:
+                                BorderRadius.all(Radius.circular(12)),
+                                borderSide: BorderSide(color: Colors.white30),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius:
+                                BorderRadius.all(Radius.circular(12)),
+                                borderSide: BorderSide(color: Colors.white30),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius:
+                                BorderRadius.all(Radius.circular(12)),
+                                borderSide: BorderSide(color: Colors.white),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                            ),
+                            onSubmitted: (_) => _sendComment(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: _sendComment,
+                          icon: const Icon(Icons.send, color: Colors.white),
+                        ),
+                        IconButton(
+                          onPressed: _toggleControlsPanel,
+                          icon: Icon(
+                            showControlsPanel
+                                ? Icons.keyboard_arrow_down
+                                : Icons.keyboard_arrow_up,
+                            color: Colors.white,
+                            size: 30,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -14,12 +14,12 @@ class SocialLoginPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
 
-    final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+    final GoogleSignIn googleSignIn = GoogleSignIn.instance;
 
 
     Future<String?> signInAndGetIdToken() async {
       try {
-        final account = await _googleSignIn.authenticate();
+        final account = await googleSignIn.authenticate();
         final idToken = account.authentication.idToken;
         return idToken; // Send this to your NestJS backend
       } catch (e) {

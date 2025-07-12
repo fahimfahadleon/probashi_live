@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:probashi_live/ui/live_view.dart';
 import 'package:probashi_live/ui/profile_tab_view.dart';
 import 'package:probashi_live/ui/shorts_tab_view.dart';
 import 'package:probashi_live/ui/video_tab_view.dart';
 import '../utils/socket_service.dart';
 import 'home_tab_view.dart';
-import 'live_page.dart';
 import 'message_tab_view.dart';
 
 class HomePage extends StatefulWidget {
@@ -17,7 +17,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedBottomNavIndex = 0;
-  final socketService = SocketService();
+  final socketService = SocketService.instance;
 
   final List<Widget> _pages = const [
     HomeTabView(),
@@ -84,7 +84,7 @@ class _HomePageState extends State<HomePage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const LivePage(rtmpUrl: "rtmp://192.168.11.2:1935/live/test"),
+                  builder: (_) => LivePage(),
                 ),
               );
             },

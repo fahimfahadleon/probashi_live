@@ -15,10 +15,13 @@ class UserProfile {
   final String? badge;
   final Map<String, dynamic>? settings;
   final Map<String, dynamic>? extra;
+  final bool isBlocked;       // Added this field
   final DateTime createdAt;
+  final DateTime updatedAt;   // Added this field
 
-  final UserStats stats;
-  final UserRelation relation;
+  // If you want to include stats and relation, you can keep them or remove if not needed
+  final UserStats? stats;
+  final UserRelation? relation;
 
   UserProfile({
     required this.id,
@@ -32,9 +35,11 @@ class UserProfile {
     this.badge,
     this.settings,
     this.extra,
+    required this.isBlocked,
     required this.createdAt,
-    required this.stats,
-    required this.relation,
+    required this.updatedAt,
+    this.stats,
+    this.relation,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) =>

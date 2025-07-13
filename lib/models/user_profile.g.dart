@@ -18,9 +18,15 @@ UserProfile _$UserProfileFromJson(Map<String, dynamic> json) => UserProfile(
   badge: json['badge'] as String?,
   settings: json['settings'] as Map<String, dynamic>?,
   extra: json['extra'] as Map<String, dynamic>?,
+  isBlocked: json['isBlocked'] as bool,
   createdAt: DateTime.parse(json['createdAt'] as String),
-  stats: UserStats.fromJson(json['stats'] as Map<String, dynamic>),
-  relation: UserRelation.fromJson(json['relation'] as Map<String, dynamic>),
+  updatedAt: DateTime.parse(json['updatedAt'] as String),
+  stats: json['stats'] == null
+      ? null
+      : UserStats.fromJson(json['stats'] as Map<String, dynamic>),
+  relation: json['relation'] == null
+      ? null
+      : UserRelation.fromJson(json['relation'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$UserProfileToJson(UserProfile instance) =>
@@ -36,7 +42,9 @@ Map<String, dynamic> _$UserProfileToJson(UserProfile instance) =>
       'badge': instance.badge,
       'settings': instance.settings,
       'extra': instance.extra,
+      'isBlocked': instance.isBlocked,
       'createdAt': instance.createdAt.toIso8601String(),
+      'updatedAt': instance.updatedAt.toIso8601String(),
       'stats': instance.stats,
       'relation': instance.relation,
     };

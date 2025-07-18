@@ -31,8 +31,9 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
     private final SurfaceView surfaceView;
     private final GenericStream genericStream;
     private final BitrateAdapter bitrateAdapter;
-    private final CameraXSource cameraXSource;
-    private final MicrophoneSource microphoneSource;
+    final int bitrate = 6000*1000;
+
+
     Context context;
 
     public GenericStreamView(@NonNull Context context) {
@@ -40,14 +41,15 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
         this.context = context;
         surfaceView = new SurfaceView(context);
         addView(surfaceView);
-        cameraXSource = new CameraXSource(context);
-        microphoneSource = new MicrophoneSource();
+
 
         genericStream = new GenericStream(context, this);
 
 
-        bitrateAdapter = new BitrateAdapter(bitrate -> genericStream.setVideoBitrateOnFly(bitrate));
-        bitrateAdapter.setMaxBitrate(1200_000 + 128_000);
+
+
+        bitrateAdapter = new BitrateAdapter(bitrat -> genericStream.setVideoBitrateOnFly(bitrat));
+        bitrateAdapter.setMaxBitrate(bitrate);
 
         surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
@@ -61,7 +63,8 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
 
                Log.e("width",String.valueOf(width));
-               Log.e("height",String.valueOf(width));
+               Log.e("height",String.valueOf(height));
+
                 genericStream.getGlInterface().setPreviewResolution(width, height);
             }
 
@@ -78,7 +81,10 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
         int width = metrics.widthPixels;
         int height = metrics.heightPixels;
 
-        boolean prepared =  genericStream.prepareVideo(width,height,1200_000,60,0,90)
+        Log.e("width",String.valueOf(width));
+        Log.e("height",String.valueOf(height));
+
+        boolean prepared =  genericStream.prepareVideo(1920,1080,bitrate,60,2,90)
                 && genericStream.prepareAudio(
                 44100,     // sampleRate
                 true,      // isStereo

@@ -59,9 +59,7 @@ class _MyPageState extends State<ProfileTabView> {
   }
 
   Future<UserProfile> _loadProfile() async {
-    UserProfile profile = await ApiService.getApiClient().getMyProfile();
-    print(profile.toJson());
-    return profile;
+    return   await ApiService.getApiClient().getMyProfile();
   }
 
   Future<void> fetchMyStats() async {

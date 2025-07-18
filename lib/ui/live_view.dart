@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:video_player/video_player.dart';
+import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 
 import '../services/generic_system_service.dart';
 import '../utils/socket_service.dart';
@@ -368,33 +368,31 @@ class ParticipantVideoWidget extends StatefulWidget {
 }
 
 class _ParticipantVideoWidgetState extends State<ParticipantVideoWidget> {
-  late VideoPlayerController _controller;
+  late VlcPlayerController _vlcController;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.network(widget.streamUrl)
-      ..initialize().then((_) {
-        setState(() {});
-        _controller.play();
-      });
+    _vlcController = VlcPlayerController.network(
+      widget.streamUrl,
+      autoPlay: true,
+      hwAcc: HwAcc.full,
+    );
   }
 
   @override
   void dispose() {
-    _controller.pause();
-    _controller.dispose();
+    _vlcController.stop();
+    _vlcController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return AspectRatio(
-      aspectRatio: _controller.value.aspectRatio,
-      child: VideoPlayer(_controller),
+    return VlcPlayer(
+      controller: _vlcController,
+      aspectRatio: 16 / 9,
+      placeholder: const Center(child: CircularProgressIndicator()),
     );
   }
 }

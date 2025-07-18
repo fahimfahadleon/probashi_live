@@ -6,13 +6,23 @@ import '../models/live_gift.dart';
 import '../models/live_session.dart';
 import '../models/live_user.dart';
 
-
 class SocketService {
+  // Singleton pattern
   static final SocketService instance = SocketService._internal();
 
+  SocketService._internal();
+
+  // Socket instance and connection state
+  late IO.Socket socket;
+  bool isConnected = false;
+
+  // User/session identifiers
   String userId = "";
   String? currentSessionId;
 
+  LiveSession? _cachedLiveSession;
+
+  // Socket event names
   static const String GO_LIVE = "go_live";
   static const String LEAVE_LIVE = "leave_live";
   static const String JOIN_SESSION = "join_session";
@@ -20,11 +30,14 @@ class SocketService {
   static const String USER_ID = "userId";
   static const String RTMP_URL = "rtmpUrl";
 
-  late IO.Socket socket;
-  bool isConnected = false;
+  static const String GET_ACTIVE_LIVE_SESSIONS = "get_active_live_sessions";
+  static const String ACTIVE_LIVE_SESSIONS = "active_live_sessions";
 
-  SocketService._internal();
+  // ========================
+  // Public API
+  // ========================
 
+  /// Initialize and connect socket with JWT token for auth
   void connect(String jwtToken) {
     socket = IO.io(
       Variables.BASE_URL,
@@ -37,84 +50,10 @@ class SocketService {
 
     socket.connect();
 
-    socket.on('connect', (_) {
-      print('Connected to socket with id: ${socket.id}');
-      isConnected = true;
-    });
-
-    socket.on('connected', (data) {
-      print('Server says: ${data['message']}');
-      if (data['userId'] != null) {
-        userId = data['userId'];
-      }
-    });
-
-    // Deserialize liveSession from JSON into model
-    socket.on('live_started', (liveSessionJson) {
-      print(liveSessionJson);
-      final liveSession = LiveSession.fromJson(liveSessionJson);
-      print('Live started: ${liveSession.id}');
-      cacheLiveSession(liveSession);
-      _liveStartedCallback?.call(liveSession);
-    });
-
-    socket.on('live_ended', (dataJson) {
-      final liveSession = LiveSession.fromJson(dataJson);
-      print('Live ended: ${liveSession.id}');
-      if (liveSession.id == currentSessionId) {
-        currentSessionId = null;
-        _cachedLiveSession = null;
-      }
-      _liveEndedCallback?.call(liveSession);
-    });
-
-    socket.on('new_comment', (commentJson) {
-      final comment = LiveComment.fromJson(commentJson);
-      print('New comment: ${comment.message}');
-      _newCommentCallback?.call(comment);
-    });
-
-    socket.on('participant_joined', (participantJson) {
-      final participant = LiveUser.fromJson(participantJson);
-      print('Participant joined: ${participant.user.name}');
-      _participantJoinedCallback?.call(participant);
-    });
-
-    socket.on('participant_left', (participantJson) {
-      final participant = LiveUser.fromJson(participantJson);
-      print('Participant left: ${participant.user.name}');
-      _participantLeftCallback?.call(participant);
-    });
-
-    socket.on('audience_joined', (audienceJson) {
-      final audience = LiveUser.fromJson(audienceJson);
-      print('Audience joined: ${audience.user.name}');
-      _audienceJoinedCallback?.call(audience);
-    });
-
-    socket.on('audience_left', (audienceJson) {
-      final audience = LiveUser.fromJson(audienceJson);
-      print('Audience left: ${audience.user.name}');
-      _audienceLeftCallback?.call(audience);
-    });
-
-    socket.on('gift_received', (giftJson) {
-      final gift = LiveGift.fromJson(giftJson);
-      print('Gift received: ${gift.giftType}');
-      _giftReceivedCallback?.call(gift);
-    });
-
-    socket.on('disconnect', (_) {
-      print('Socket disconnected');
-      isConnected = false;
-    });
-
-    socket.on('connect_error', (error) {
-      print('Connection error: $error');
-      isConnected = false;
-    });
+    _registerSocketListeners();
   }
 
+  /// Disconnect socket and clear session data
   void disconnect() {
     socket.disconnect();
     isConnected = false;
@@ -123,6 +62,7 @@ class SocketService {
     _cachedLiveSession = null;
   }
 
+  /// Start live stream by emitting 'go_live' event with userId and RTMP URL
   void goLive() {
     if (userId.isEmpty) {
       print("Cannot go live: userId is empty");
@@ -132,6 +72,7 @@ class SocketService {
     socket.emit(GO_LIVE, {USER_ID: userId, RTMP_URL: rtmpUrl});
   }
 
+  /// Leave the current live session
   void leaveLive() {
     if (userId.isEmpty || currentSessionId == null) {
       print("Cannot leave live: userId or sessionId missing");
@@ -142,6 +83,7 @@ class SocketService {
     _cachedLiveSession = null;
   }
 
+  /// Send a comment to the current live session
   void sendComment(String message) {
     if (userId.isEmpty || currentSessionId == null) {
       print("Cannot send comment: userId or sessionId missing");
@@ -154,6 +96,7 @@ class SocketService {
     });
   }
 
+  /// Join a live session as participant
   void joinSession(String sessionId) {
     if (userId.isEmpty) {
       print("Cannot join session: userId is empty");
@@ -163,6 +106,7 @@ class SocketService {
     currentSessionId = sessionId;
   }
 
+  /// Join a live session as audience
   void joinAudience(String sessionId) {
     if (userId.isEmpty) {
       print("Cannot join audience: userId is empty");
@@ -172,36 +116,45 @@ class SocketService {
     currentSessionId = sessionId;
   }
 
-  LiveSession? _cachedLiveSession;
-
-  void cacheLiveSession(LiveSession session) {
-    _cachedLiveSession = session;
-    currentSessionId = session.id;
+  /// Kick participant by userId
+  void kickParticipant(String userId) {
+    socket.emit('kick_participant', {'userId': userId});
   }
+
+  /// Mute participant by userId
+  void muteParticipant(String userId) {
+    socket.emit('mute_participant', {'userId': userId});
+  }
+
+  /// Request list of active live sessions (endedAt == null)
+  void requestActiveLiveSessions() {
+    if (!isConnected) {
+      print("Socket not connected. Cannot request active live sessions.");
+      return;
+    }
+    socket.emit(GET_ACTIVE_LIVE_SESSIONS);
+  }
+
+  // ========================
+  // Cached Live Session Getters
+  // ========================
 
   LiveSession? get currentLiveSession => _cachedLiveSession;
 
-  List<LiveUser> getParticipants() {
-    return _cachedLiveSession?.participants ?? [];
-  }
+  List<LiveUser> getParticipants() => _cachedLiveSession?.participants ?? [];
 
-  List<LiveUser> getHosts() {
-    return _cachedLiveSession?.hosts ?? [];
-  }
+  List<LiveUser> getHosts() => _cachedLiveSession?.hosts ?? [];
 
-  List<LiveUser> getAudience() {
-    return _cachedLiveSession?.audience ?? [];
-  }
+  List<LiveUser> getAudience() => _cachedLiveSession?.audience ?? [];
 
-  List<LiveComment> getComments() {
-    return _cachedLiveSession?.comments ?? [];
-  }
+  List<LiveComment> getComments() => _cachedLiveSession?.comments ?? [];
 
-  List<LiveGift> getGifts() {
-    return _cachedLiveSession?.gifts ?? [];
-  }
+  List<LiveGift> getGifts() => _cachedLiveSession?.gifts ?? [];
 
-  // Callbacks
+  // ========================
+  // Callbacks for various socket events
+  // ========================
+
   void Function(LiveSession liveSession)? _liveStartedCallback;
   void Function(LiveSession liveSession)? _liveEndedCallback;
   void Function(LiveComment comment)? _newCommentCallback;
@@ -210,6 +163,8 @@ class SocketService {
   void Function(LiveUser audience)? _audienceJoinedCallback;
   void Function(LiveUser audience)? _audienceLeftCallback;
   void Function(LiveGift gift)? _giftReceivedCallback;
+
+  void Function(List<LiveSession> sessions)? _activeLiveSessionsCallback;
 
   void onLiveStarted(void Function(LiveSession liveSession) callback) {
     _liveStartedCallback = callback;
@@ -243,11 +198,105 @@ class SocketService {
     _giftReceivedCallback = callback;
   }
 
-  void kickParticipant(String userId) {
-    socket.emit('kick_participant', {'userId': userId});
+  /// Callback when active live sessions are received
+  void onActiveLiveSessions(void Function(List<LiveSession> sessions) callback) {
+    _activeLiveSessionsCallback = callback;
   }
 
-  void muteParticipant(String userId) {
-    socket.emit('mute_participant', {'userId': userId});
+  // ========================
+  // Private Helpers
+  // ========================
+
+  void _registerSocketListeners() {
+    socket.on('connect', (_) {
+      print('Connected to socket with id: ${socket.id}');
+      isConnected = true;
+    });
+
+    socket.on('connected', (data) {
+      print('Server says: ${data['message']}');
+      if (data['userId'] != null) {
+        userId = data['userId'];
+      }
+    });
+
+    socket.on('live_started', (liveSessionJson) {
+      final liveSession = LiveSession.fromJson(liveSessionJson);
+      print('Live started: ${liveSession.id}');
+      cacheLiveSession(liveSession);
+      _liveStartedCallback?.call(liveSession);
+    });
+
+    socket.on('live_ended', (dataJson) {
+      final liveSession = dataJson;
+      print('Live ended: ${liveSession.id}');
+      if (liveSession.id == currentSessionId) {
+        currentSessionId = null;
+        _cachedLiveSession = null;
+      }
+      _liveEndedCallback?.call(liveSession);
+    });
+
+    socket.on('new_comment', (commentJson) {
+      final comment = commentJson;
+      print('New comment: ${comment.message}');
+      _newCommentCallback?.call(comment);
+    });
+
+    socket.on('participant_joined', (participantJson) {
+      final participant = participantJson;
+      print('Participant joined: ${participant.user.name}');
+      _participantJoinedCallback?.call(participant);
+    });
+
+    socket.on('participant_left', (participantJson) {
+      final participant = participantJson;
+      print('Participant left: ${participant.user.name}');
+      _participantLeftCallback?.call(participant);
+    });
+
+    socket.on('audience_joined', (audienceJson) {
+      final audience = audienceJson;
+      print('Audience joined: $audience');
+      _audienceJoinedCallback?.call(audience);
+    });
+
+    socket.on('audience_left', (audienceJson) {
+      final audience = audienceJson;
+      _audienceLeftCallback?.call(audience);
+    });
+
+    socket.on('gift_received', (giftJson) {
+      final gift = giftJson;
+      print('Gift received: ${gift.giftType}');
+      _giftReceivedCallback?.call(gift);
+    });
+
+    socket.on(ACTIVE_LIVE_SESSIONS, (data) {
+      print("Received active live sessions: $data");
+      try {
+        final sessions = (data as List)
+            .map((json) => LiveSession.fromJson(json))
+            .toList();
+        _activeLiveSessionsCallback?.call(sessions);
+      } catch (e) {
+        print("Error parsing active live sessions: $e");
+      }
+    });
+
+    socket.on('disconnect', (_) {
+      print('Socket disconnected');
+      isConnected = false;
+    });
+
+    socket.on('connect_error', (error) {
+      print('Connection error: $error');
+      isConnected = false;
+    });
+  }
+
+  void cacheLiveSession(LiveSession session) {
+    _cachedLiveSession = session;
+    currentSessionId = session.id;
   }
 }

@@ -31,6 +31,7 @@ class SocialLoginPage extends StatelessWidget {
     Future<void> handleGoogleLogin() async {
       final idToken = await signInAndGetIdToken();
       if (idToken != null) {
+        print("idToken: $idToken");
         final response = await AuthService().login(
           provider: AuthProvider.google,
           token: idToken,

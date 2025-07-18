@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
-import 'package:probashi_live/ui/single_user_card.dart';
-import 'package:probashi_live/ui/user_live_page.dart';
+import 'package:probashi_live/ui/audience_page.dart';
 import 'package:probashi_live/utils/api_service.dart';
+import 'package:probashi_live/utils/socket_service.dart';  // Import your socket service
 
 import '../models/announcement_model.dart';
-import '../models/user_card_data.dart';
+import '../models/live_session.dart';
+
+import '../utils/variables.dart';
 import 'custom_tab_bar.dart';
 
 class HomeTabView extends StatefulWidget {
@@ -15,70 +17,58 @@ class HomeTabView extends StatefulWidget {
   State<HomeTabView> createState() => _HomeTabViewState();
 }
 
-class _HomeTabViewState extends State<HomeTabView>
-    with TickerProviderStateMixin {
+class _HomeTabViewState extends State<HomeTabView> with TickerProviderStateMixin {
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
   Announcement? _latestAnnouncement;
-  final List<UserCardData> _allUsers = List.generate(
-    50,
-        (index) => UserCardData(
-      id: index,
-      name: "User $index",
-      tags: index % 2 == 0 ? ["PK", "Big Star"] : ["FreshersBuzz!"],
-      views: 9000 + index * 100,
-      isLive: index % 5 == 0,
-      imageUrl: "https://i.pravatar.cc/150?img=${index % 70}",
-    ),
-  );
 
-  static const int pageSize = 15;
-  int _currentMaxIndex = pageSize;
-
-  List<UserCardData> get _visibleUsers =>
-      _allUsers.take(_currentMaxIndex).toList();
+  // Live sessions from socket
+  List<LiveSession> _liveSessions = [];
+  bool _loadingLiveSessions = true;
 
   @override
   void initState() {
     super.initState();
     _fetchAnnouncement();
+
     _tabController = TabController(length: 5, vsync: this);
+
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
           _scrollController.position.maxScrollExtent - 200) {
-        _loadMore();
+        // Optional: implement pagination for live sessions if your backend supports it
       }
     });
 
+    _setupSocket();
   }
-
 
   Future<void> _fetchAnnouncement() async {
     try {
       final announcements = await ApiService.getApiClient().getAllAnnouncements();
       setState(() {
-        _latestAnnouncement =  announcements.isNotEmpty ? announcements.first : null;
-
+        _latestAnnouncement = announcements.isNotEmpty ? announcements.first : null;
       });
     } catch (e) {
       print(e);
     }
   }
 
-  void _loadMore() {
-    if (_currentMaxIndex >= _allUsers.length) return;
-    setState(() {
-      _currentMaxIndex = (_currentMaxIndex + pageSize).clamp(
-        0,
-        _allUsers.length,
-      );
+  void _setupSocket() {
+    SocketService.instance.onActiveLiveSessions((sessions) {
+      setState(() {
+        _liveSessions = sessions;
+        _loadingLiveSessions = false;
+      });
     });
+    SocketService.instance.requestActiveLiveSessions();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _scrollController.dispose();
+    SocketService.instance.disconnect();
     super.dispose();
   }
 
@@ -123,7 +113,7 @@ class _HomeTabViewState extends State<HomeTabView>
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16,vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: CustomTabBar(
             selectedIndex: _tabController.index,
             tabs: ["Freshers", "Popular", "Spotlight", "Party", "PK Matches"],
@@ -134,7 +124,6 @@ class _HomeTabViewState extends State<HomeTabView>
             },
           ),
         ),
-
         if (_latestAnnouncement != null)
           Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -166,8 +155,6 @@ class _HomeTabViewState extends State<HomeTabView>
               ],
             ),
           ),
-
-
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
@@ -182,42 +169,224 @@ class _HomeTabViewState extends State<HomeTabView>
               ),
               const Spacer(),
               IconButton(
-                onPressed: () {},
+                onPressed: () {
+                  // Optional: Add filter action
+                },
                 icon: const Icon(Icons.filter_alt, color: Colors.white70),
               ),
             ],
           ),
         ),
+
+
+
+
         Expanded(
           child: TabBarView(
             controller: _tabController,
             children: List.generate(5, (index) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: MasonryGridView.count(
-                  controller: _scrollController,
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  itemCount: _visibleUsers.length,
-                  itemBuilder: (context, i) {
-                    final user = _visibleUsers[i];
-                    return UserCard(
-                      data: user,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => UserLivePage(user: user),
+              return RefreshIndicator(
+                color: Colors.white,
+                backgroundColor: Colors.pinkAccent,
+                onRefresh: () async {
+                  setState(() {
+                    _loadingLiveSessions = true;
+                  });
+                  SocketService.instance.requestActiveLiveSessions();
+                },
+                child: _loadingLiveSessions
+                    ? const Center(child: CircularProgressIndicator())
+                    : _liveSessions.isEmpty
+                    ? ListView(
+                  // ListView is needed for RefreshIndicator to work when empty
+                  children: [
+                    SizedBox(height: 200),
+                    Center(
+                      child: Text(
+                        "No live sessions found",
+                        style: TextStyle(color: Colors.white70, fontSize: 16),
+                      ),
+                    ),
+                  ],
+                )
+                    : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: MasonryGridView.count(
+                    controller: _scrollController,
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    itemCount: _liveSessions.length,
+                    itemBuilder: (context, i) {
+                      final liveSession = _liveSessions[i];
+                      final hostUser = liveSession.hosts.isNotEmpty
+                          ? liveSession.hosts.first.user
+                          : null;
+
+                      return GestureDetector(
+                        onTap: () {
+                          if (hostUser != null) {
+
+                            String url = "${Variables.RTMP_URL}/${liveSession.hosts.first.user.id}";
+                            print(url);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => AudiencePage(
+                                    liveSession: liveSession),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white12,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        );
-                      },
-                    );
-                  },
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: hostUser?.profilePic != null
+                                    ? Image.network(
+                                  hostUser!.profilePic,
+                                  height: 120,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                )
+                                    : Container(
+                                  height: 120,
+                                  color: Colors.grey,
+                                  child: const Center(
+                                    child: Icon(Icons.person,
+                                        size: 50),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                hostUser?.name ?? "Unknown Host",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "Live Now",
+                                style: TextStyle(
+                                  color: Colors.redAccent.shade200,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               );
             }),
           ),
         ),
+
+
+
+
+
+
+
+
+        // Expanded(
+        //   child: TabBarView(
+        //     controller: _tabController,
+        //     children: List.generate(5, (index) {
+        //       if (_loadingLiveSessions) {
+        //         return const Center(child: CircularProgressIndicator());
+        //       }
+        //
+        //       if (_liveSessions.isEmpty) {
+        //         return const Center(child: Text("No live sessions found", style: TextStyle(color: Colors.white70)));
+        //       }
+        //
+        //       return Padding(
+        //         padding: const EdgeInsets.symmetric(horizontal: 12),
+        //         child: MasonryGridView.count(
+        //           controller: _scrollController,
+        //           crossAxisCount: 2,
+        //           mainAxisSpacing: 12,
+        //           crossAxisSpacing: 12,
+        //           itemCount: _liveSessions.length,
+        //           itemBuilder: (context, i) {
+        //             final liveSession = _liveSessions[i];
+        //             final hostUser = liveSession.hosts.isNotEmpty ? liveSession.hosts.first.user : null;
+        //
+        //             return GestureDetector(
+        //               onTap: () {
+        //                 if (hostUser != null) {
+        //                   Navigator.of(context).push(
+        //                     MaterialPageRoute(
+        //                       builder: (_) => AudiencePage(liveSession: liveSession,),
+        //                     ),
+        //                   );
+        //                 }
+        //               },
+        //               child: Container(
+        //                 decoration: BoxDecoration(
+        //                   color: Colors.white12,
+        //                   borderRadius: BorderRadius.circular(12),
+        //                 ),
+        //                 padding: const EdgeInsets.all(8),
+        //                 child: Column(
+        //                   crossAxisAlignment: CrossAxisAlignment.start,
+        //                   children: [
+        //                     ClipRRect(
+        //                       borderRadius: BorderRadius.circular(10),
+        //                       child: hostUser?.profilePic != null
+        //                           ? Image.network(
+        //                         hostUser!.profilePic,
+        //                         height: 120,
+        //                         width: double.infinity,
+        //                         fit: BoxFit.cover,
+        //                       )
+        //                           : Container(
+        //                         height: 120,
+        //                         color: Colors.grey,
+        //                         child: const Center(
+        //                           child: Icon(Icons.person, size: 50),
+        //                         ),
+        //                       ),
+        //                     ),
+        //                     const SizedBox(height: 8),
+        //                     Text(
+        //                       hostUser?.name ?? "Unknown Host",
+        //                       style: const TextStyle(
+        //                         color: Colors.white,
+        //                         fontWeight: FontWeight.bold,
+        //                         fontSize: 16,
+        //                       ),
+        //                     ),
+        //                     const SizedBox(height: 4),
+        //                     Text(
+        //                       "Live Now",
+        //                       style: TextStyle(
+        //                         color: Colors.redAccent.shade200,
+        //                         fontWeight: FontWeight.bold,
+        //                       ),
+        //                     ),
+        //                   ],
+        //                 ),
+        //               ),
+        //             );
+        //           },
+        //         ),
+        //       );
+        //     }),
+        //   ),
+        // ),
       ],
     );
   }

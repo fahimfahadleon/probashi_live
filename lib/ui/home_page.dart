@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:probashi_live/ui/audience_page.dart';
 import 'package:probashi_live/ui/live_view.dart';
 import 'package:probashi_live/ui/profile_tab_view.dart';
 import 'package:probashi_live/ui/shorts_tab_view.dart';
@@ -26,16 +27,30 @@ class _HomePageState extends State<HomePage> {
     MessageTabView(),
     ProfileTabView(),
   ];
+
+  bool _socketConnected = false;
+
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
     _initSocket();
-
   }
+
   Future<void> _initSocket() async {
     final token = await FlutterSecureStorage().read(key: 'access_token');
-    socketService.connect(token!);
+    if (token != null) {
+      socketService.connect(token);
+
+      socketService.socket.on('connected', (data) {
+        debugPrint('Socket connected: ${data['message']}');
+
+        setState(() {
+          _socketConnected = true;
+        });
+      });
+
+
+    }
   }
 
   void _onBottomNavTap(int index) {
@@ -46,6 +61,15 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_socketConnected) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.amberAccent),
+        ),
+      );
+    }
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -66,26 +90,19 @@ class _HomePageState extends State<HomePage> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(icon: Icons.home, label: "Live", index: 0),
-                _buildNavItem(
-                  icon: Icons.camera_alt,
-                  label: "Shorts",
-                  index: 1,
-                ),
+                _buildNavItem(icon: Icons.camera_alt, label: "Shorts", index: 1),
                 const SizedBox(width: 40),
                 _buildNavItem(icon: Icons.message, label: "Message", index: 3),
                 _buildNavItem(icon: Icons.person, label: "Profile", index: 4),
               ],
             ),
           ),
-          floatingActionButtonLocation:
-              FloatingActionButtonLocation.centerDocked,
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
           floatingActionButton: FloatingActionButton(
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => LivePage(),
-                ),
+                MaterialPageRoute(builder: (_) => LivePage()),
               );
             },
             shape: const CircleBorder(),
@@ -122,5 +139,3 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
-

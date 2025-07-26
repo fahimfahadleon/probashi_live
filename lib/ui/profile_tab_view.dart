@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:probashi_live/ui/top_up_view.dart';
 import 'package:probashi_live/utils/api_service.dart';
+import 'package:probashi_live/utils/socket_service.dart';
 
 import '../models/offer.dart';
 import '../models/user_profile.dart';
@@ -27,7 +28,7 @@ class _MyPageState extends State<ProfileTabView> {
   void initState() {
     super.initState();
     _futureProfile = _loadProfile();
-    fetchMyStats();
+    fetchUserStats(SocketService.instance.userId);
     fetchOffers();
   }
 
@@ -62,9 +63,9 @@ class _MyPageState extends State<ProfileTabView> {
     return   await ApiService.getApiClient().getMyProfile();
   }
 
-  Future<void> fetchMyStats() async {
+  Future<void> fetchUserStats(String userId) async {
     try {
-      final stats = await ApiService.getApiClient().getMyStats();
+      final stats = await ApiService.getApiClient().getUserStats(userId);
       setState(() {
         _status = stats;
       });

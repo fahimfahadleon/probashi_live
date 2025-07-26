@@ -1,6 +1,10 @@
+import 'package:probashi_live/utils/utils.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:probashi_live/utils/variables.dart';
 
+import '../models/chat_history_response.dart';
+import '../models/chat_inbox_entry.dart';
+import '../models/chat_message.dart';
 import '../models/live_comment.dart';
 import '../models/live_gift.dart';
 import '../models/live_session.dart';
@@ -135,6 +139,40 @@ class SocketService {
     socket.emit(GET_ACTIVE_LIVE_SESSIONS);
   }
 
+  void sendMessage({
+    required String senderId,
+    required String receiverId,
+    required String content,
+  }) {
+    socket.emit('send_message', {
+      'senderId': senderId,
+      'receiverId': receiverId,
+      'content': content,
+    });
+  }
+
+  void getChatHistory({
+    required String userId,
+    required String otherUserId,
+    int page = 1,
+    int limit = 20,
+  }) {
+    socket.emit('get_chat_history', {
+      'userId': userId,
+      'otherUserId': otherUserId,
+      'page': page,
+      'limit': limit,
+    });
+  }
+
+  void getChatInbox() {
+    socket.emit('get_chat_inbox', {'userId': userId});
+  }
+
+  void off(String eventName) {
+    socket.off(eventName);
+  }
+
   // ========================
   // Cached Live Session Getters
   // ========================
@@ -157,12 +195,15 @@ class SocketService {
 
   void Function(LiveSession liveSession)? _liveStartedCallback;
   void Function(LiveSession liveSession)? _liveEndedCallback;
+  void Function(LiveSession liveSession)? _sessionUpdatedCallback;
   void Function(LiveComment comment)? _newCommentCallback;
   void Function(LiveUser participant)? _participantJoinedCallback;
   void Function(LiveUser participant)? _participantLeftCallback;
-  void Function(LiveUser audience)? _audienceJoinedCallback;
-  void Function(LiveUser audience)? _audienceLeftCallback;
+  void Function(Map<String, dynamic> audience)? _audienceJoinedCallback;
+  void Function(Map<String, dynamic> audience)? _audienceLeftCallback;
   void Function(LiveGift gift)? _giftReceivedCallback;
+  void Function(ChatMessage message)? _newMessageCallback;
+  void Function(ChatHistoryResponse response)? _chatHistoryCallback;
 
   void Function(List<LiveSession> sessions)? _activeLiveSessionsCallback;
 
@@ -172,6 +213,10 @@ class SocketService {
 
   void onLiveEnded(void Function(LiveSession liveSession) callback) {
     _liveEndedCallback = callback;
+  }
+
+  void onSessionUpdated(void Function(LiveSession liveSession) callback) {
+    _sessionUpdatedCallback = callback;
   }
 
   void onNewComment(void Function(LiveComment comment) callback) {
@@ -186,11 +231,11 @@ class SocketService {
     _participantLeftCallback = callback;
   }
 
-  void onAudienceJoined(void Function(LiveUser audience) callback) {
+  void onAudienceJoined(void Function(Map<String, dynamic> audience) callback) {
     _audienceJoinedCallback = callback;
   }
 
-  void onAudienceLeft(void Function(LiveUser audience) callback) {
+  void onAudienceLeft(void Function(Map<String, dynamic> audience) callback) {
     _audienceLeftCallback = callback;
   }
 
@@ -202,6 +247,26 @@ class SocketService {
   void onActiveLiveSessions(void Function(List<LiveSession> sessions) callback) {
     _activeLiveSessionsCallback = callback;
   }
+
+  void onNewMessage(void Function(ChatMessage message) callback) {
+    _newMessageCallback = callback;
+  }
+
+  void onChatHistory(void Function(ChatHistoryResponse response) callback) {
+    _chatHistoryCallback = callback;
+  }
+
+  void onChatInbox(void Function(List<ChatInboxEntry>) callback) {
+    socket.on('chat_inbox', (data) {
+      final List<ChatInboxEntry> inbox = (data as List)
+          .map((entry) => ChatInboxEntry.fromJson(entry))
+          .toList();
+
+      callback(inbox); // ✅ Call the callback with typed list
+    });
+  }
+
+
 
   // ========================
   // Private Helpers
@@ -228,8 +293,9 @@ class SocketService {
     });
 
     socket.on('live_ended', (dataJson) {
-      final liveSession = dataJson;
-      print('Live ended: ${liveSession.id}');
+      Utils.printGreenComment(dataJson.toString());
+      final liveSession = LiveSession.fromJson(dataJson);
+      Utils.printGreenComment(liveSession.toJson().toString());
       if (liveSession.id == currentSessionId) {
         currentSessionId = null;
         _cachedLiveSession = null;
@@ -237,20 +303,29 @@ class SocketService {
       _liveEndedCallback?.call(liveSession);
     });
 
-    socket.on('new_comment', (commentJson) {
-      final comment = commentJson;
+    socket.on('session_updated', (dataJson) {
+      final updatedSession = LiveSession.fromJson(dataJson);
+      print('Session updated: ${updatedSession.id}');
+      cacheLiveSession(updatedSession); // ⬅️ Keep cache in sync
+      _sessionUpdatedCallback?.call(updatedSession);
+    });
+
+
+     socket.on('new_comment', (commentJson) {
+       print(commentJson);
+      final comment = LiveComment.fromJson(commentJson);
       print('New comment: ${comment.message}');
       _newCommentCallback?.call(comment);
     });
 
     socket.on('participant_joined', (participantJson) {
-      final participant = participantJson;
+      final participant = LiveUser.fromJson(participantJson);
       print('Participant joined: ${participant.user.name}');
       _participantJoinedCallback?.call(participant);
     });
 
     socket.on('participant_left', (participantJson) {
-      final participant = participantJson;
+      final participant = LiveUser.fromJson(participantJson);
       print('Participant left: ${participant.user.name}');
       _participantLeftCallback?.call(participant);
     });
@@ -267,7 +342,7 @@ class SocketService {
     });
 
     socket.on('gift_received', (giftJson) {
-      final gift = giftJson;
+      final gift = LiveGift.fromJson(giftJson);
       print('Gift received: ${gift.giftType}');
       _giftReceivedCallback?.call(gift);
     });
@@ -293,10 +368,25 @@ class SocketService {
       print('Connection error: $error');
       isConnected = false;
     });
+
+
+    socket.on('new_message', (data) {
+      final message = ChatMessage.fromJson(data);
+      _newMessageCallback?.call(message);
+    });
+
+    socket.on('chat_history', (data) {
+      final history = ChatHistoryResponse.fromJson(data);
+      _chatHistoryCallback?.call(history);
+    });
+
   }
 
   void cacheLiveSession(LiveSession session) {
     _cachedLiveSession = session;
     currentSessionId = session.id;
   }
+
+
+
 }

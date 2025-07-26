@@ -1,88 +1,19 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
-
-// class AudiencePage extends StatefulWidget {
-//   final String streamUrl;
-//
-//   const AudiencePage({Key? key, required this.streamUrl}) : super(key: key);
-//
-//   @override
-//   State<AudiencePage> createState() => _AudiencePageState();
-// }
-//
-// class _AudiencePageState extends State<AudiencePage> {
-//   late VlcPlayerController _controller;
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//     print(widget.streamUrl);
-//
-//     // Lock orientation to portrait up only
-//     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-//
-//     _controller = VlcPlayerController.network(widget.streamUrl, autoPlay: true);
-//
-//     _controller.addOnInitListener(() async {
-//       _controller.setVideoAspectRatio("16/9");
-//
-//       var videoAspectRatio = await _controller.getVideoAspectRatio();
-//       print("aspect ratio: " + videoAspectRatio!);
-//     });
-//   }
-//
-//   @override
-//   void dispose() {
-//     // Unlock orientation on dispose
-//     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-//
-//     _controller.stop();
-//     _controller.dispose();
-//     super.dispose();
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     // final screenSize = MediaQuery.of(context).size;
-//     // final screenAspectRatio = screenSize.width / screenSize.height;
-//
-//     return Scaffold(
-//       backgroundColor: Colors.black,
-//       body: Stack(
-//         children: [
-//           // Make VLC player fill entire screen with correct aspect ratio
-//           Positioned.fill(
-//             child: VlcPlayer(
-//               controller: _controller,
-//               aspectRatio: 9/16,
-//               placeholder: const Center(child: CircularProgressIndicator()),
-//             ),
-//           ),
-//
-//           // Close button on top right
-//           Positioned(
-//             top: 40,
-//             right: 16,
-//             child: IconButton(
-//               icon: const Icon(Icons.close, color: Colors.white),
-//               onPressed: () => Navigator.pop(context),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
-import 'package:flutter/material.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:probashi_live/models/live_session.dart';
+import 'package:probashi_live/ui/participant_video_widget.dart';
 
 import '../models/live_comment.dart';
 import '../models/live_user.dart';
+import '../models/user_profile.dart';
+import '../utils/api_service.dart';
 import '../utils/socket_service.dart';
+import '../utils/utils.dart';
 import '../utils/variables.dart';
+import 'mini_user_profile_dialog.dart';
+import 'one_to_one_chat.dart';
 
 class AudiencePage extends StatefulWidget {
   final LiveSession liveSession;
@@ -90,10 +21,11 @@ class AudiencePage extends StatefulWidget {
   final String hostUserId;
   final String streamerName;
 
+
   AudiencePage({required this.liveSession, super.key})
-      : sessionId = liveSession.id,
-        hostUserId = liveSession.hosts.first.user.id,
-        streamerName = liveSession.hosts.first.user.name;
+    : sessionId = liveSession.id,
+      hostUserId = liveSession.hosts.first.user.id,
+      streamerName = liveSession.hosts.first.user.name;
 
   @override
   State<AudiencePage> createState() => _AudiencePageState();
@@ -103,17 +35,34 @@ class _AudiencePageState extends State<AudiencePage> {
   final TextEditingController _chatController = TextEditingController();
   final List<LiveComment> comments = [];
   final List<LiveUser> participants = [];
+
+  late VlcPlayerController _mainStreamController;
+
   bool showCommentList = true;
   bool showControlsPanel = false;
+
+  int viewerCount = 0;
+
 
   @override
   void initState() {
     super.initState();
 
+    final mainStreamUrl = "${Variables.RTMP_URL}/${widget.hostUserId}";
+    _mainStreamController = VlcPlayerController.network(
+      mainStreamUrl,
+      hwAcc: HwAcc.full,
+      autoPlay: true,
+      options: VlcPlayerOptions(),
+    );
+
     SocketService.instance.joinAudience(widget.sessionId);
 
     SocketService.instance.onNewComment((comment) {
-      setState(() => comments.add(comment));
+      setState(() {
+        Utils.printGreenComment(comment.message);
+        comments.add(comment);
+      });
     });
 
     SocketService.instance.onParticipantJoined((participant) {
@@ -121,11 +70,40 @@ class _AudiencePageState extends State<AudiencePage> {
     });
 
     SocketService.instance.onParticipantLeft((participant) {
-      final leftUser = participant;
       setState(() {
-        participants.removeWhere((p) => p.user.id == leftUser.user.id);
+        participants.removeWhere((p) => p.user.id == participant.user.id);
       });
     });
+
+    // Add these listeners if not already:
+    SocketService.instance.onAudienceJoined((audience) {
+      // Handle audience join if needed
+    });
+
+    SocketService.instance.onAudienceLeft((audience) {
+      // Handle audience left if needed
+    });
+
+    SocketService.instance.onLiveEnded((session) {
+      Utils.showToast(context, "The Live Ended!");
+      Navigator.pop(context);
+    });
+
+    SocketService.instance.onSessionUpdated((session) {
+      // Update your session data if needed
+      setState(() {
+        viewerCount = session.audience.length;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    SocketService.instance.leaveLive();
+    _mainStreamController.stop();
+    _mainStreamController.dispose();
+    _chatController.dispose();
+    super.dispose();
   }
 
   void _sendComment() {
@@ -137,53 +115,37 @@ class _AudiencePageState extends State<AudiencePage> {
   }
 
   Widget _buildStreamGrid() {
-    String streamUrl = "${Variables.RTMP_URL}/${widget.hostUserId}";
-
-    if (participants.isEmpty) {
-      return SizedBox.expand(
+    List<Widget> videoWidgets = [
+      AspectRatio(
+        aspectRatio: 9 / 16,
         child: VlcPlayer(
-          controller: VlcPlayerController.network(
-            streamUrl,
-            hwAcc: HwAcc.full,
-            autoPlay: true,
-            options: VlcPlayerOptions(),
-          ),
-          aspectRatio: 16 / 9, // required but overridden by SizedBox.expand
+          controller: _mainStreamController,
+          aspectRatio: 9 / 16,
           placeholder: const Center(child: CircularProgressIndicator()),
         ),
-      );
-    }
-
-    final List<Widget> videoWidgets = [
-      AspectRatio(
-        aspectRatio: 16 / 9,
-        child: ParticipantVideoWidget(streamUrl: streamUrl),
       ),
     ];
 
     videoWidgets.addAll(
       participants.map((p) {
-        final userId = p.user.id;
-        String streamUrl = "${Variables.RTMP_URL}/$userId";
+        final streamUrl = "${Variables.RTMP_URL}/${p.user.id}";
         return AspectRatio(
-          aspectRatio: 16 / 9,
+          aspectRatio: 9 / 16,
           child: ParticipantVideoWidget(streamUrl: streamUrl),
         );
-      }),
+      }).toList(),
     );
+
+    if (videoWidgets.length == 1) {
+      return videoWidgets.first;
+    }
 
     return GridView.count(
       crossAxisCount: videoWidgets.length <= 2 ? 2 : 3,
-      children: videoWidgets,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      children: videoWidgets,
     );
-  }
-  @override
-  void dispose() {
-    SocketService.instance.leaveLive();
-    _chatController.dispose();
-    super.dispose();
   }
 
   @override
@@ -195,32 +157,80 @@ class _AudiencePageState extends State<AudiencePage> {
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          participants.isEmpty
-              ? _buildStreamGrid()
-              : Positioned.fill(child: _buildStreamGrid()),
+          // Always wrap stream in Positioned.fill
+          Positioned.fill(child: _buildStreamGrid()),
 
+          // Streamer name + close button
           Positioned(
             top: 40,
             left: 16,
             right: 16,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.streamerName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                GestureDetector(
+                  onTap: () async {
+                    final tappedUserId = widget.hostUserId;
+
+                    // Prevent showing own profile
+                    if (tappedUserId == SocketService.instance.userId) return;
+
+                    try {
+                      // Load stats and profile
+                      UserStats stats = await ApiService.getApiClient().getUserStats(tappedUserId);
+                      UserProfile profile = await ApiService.getApiClient().getUserProfile(tappedUserId);
+                      profile.stats = stats;
+
+                      _showMiniProfileDialog(profile);
+                    } catch (e) {
+                      print("Error loading profile: $e");
+                    }
+                  },
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundImage: CachedNetworkImageProvider(widget.liveSession.hosts.first.user.profilePic),
+                    backgroundColor: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.liveSession.hosts.first.user.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.remove_red_eye, size: 14, color: Colors.white70),
+                          const SizedBox(width: 4),
+                          Text(
+                            "$viewerCount viewers",
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed:()=> Navigator.pop(context),
                 ),
               ],
             ),
           ),
 
+          // Comment list
           if (showCommentList)
             Positioned(
               left: 0,
@@ -232,18 +242,80 @@ class _AudiencePageState extends State<AudiencePage> {
                 itemCount: comments.length,
                 itemBuilder: (context, index) {
                   final c = comments[comments.length - 1 - index];
-                  final userName = c.liveUser.user.name;
-                  final message = c.message;
-                  return ListTile(
-                    title: Text(
-                      "$userName: $message",
-                      style: const TextStyle(color: Colors.white),
+                  return Container(
+                    margin: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 8,
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.5),
+                      // placeholder bg color
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Profile picture
+                        GestureDetector(
+                          onTap: () async {
+                            if (c.liveUser.user.id !=
+                                SocketService.instance.userId) {
+
+                              Utils.printGreenComment(c.liveUser.user.toJson().toString());
+
+                              if (c.liveUser.user.id == SocketService.instance.userId) return;
+
+                              UserStats state = await ApiService.getApiClient().getUserStats(c.liveUser.user.id);
+                              c.liveUser.user.stats = state;
+
+                              UserProfile profile = await ApiService.getApiClient().getUserProfile(c.liveUser.user.id);
+                              UserStats states = await ApiService.getApiClient().getUserStats(c.liveUser.user.id);
+                              profile.stats = states;
+
+                              _showMiniProfileDialog(profile);
+                            }
+                          },
+                          child: CircleAvatar(
+                            radius: 16,
+                            backgroundImage: CachedNetworkImageProvider(
+                              c.liveUser.user.profilePic,
+                            ),
+                            backgroundColor: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Username + message as two lines
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "${c.liveUser.user.name}",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                c.message,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
               ),
             ),
 
+          // Controls Panel
           if (showControlsPanel)
             Positioned(
               bottom: keyboardHeight + 60,
@@ -264,7 +336,7 @@ class _AudiencePageState extends State<AudiencePage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      onPressed: () {},
+                      onPressed: () {}, // Add gift logic here
                       icon: const Icon(
                         Icons.card_giftcard,
                         color: Colors.white,
@@ -276,6 +348,7 @@ class _AudiencePageState extends State<AudiencePage> {
               ),
             ),
 
+          // Chat input row
           Positioned(
             left: 0,
             right: 0,
@@ -328,44 +401,40 @@ class _AudiencePageState extends State<AudiencePage> {
       ),
     );
   }
-}
 
-class ParticipantVideoWidget extends StatefulWidget {
-  final String streamUrl;
+  void _showMiniProfileDialog(UserProfile userProfile) {
+    // Optionally prevent showing own profile
+    if (userProfile.id == SocketService.instance.userId) return;
 
-  const ParticipantVideoWidget({super.key, required this.streamUrl});
+    Utils.printGreenComment(userProfile.toJson().toString());
 
-  @override
-  State<ParticipantVideoWidget> createState() => _ParticipantVideoWidgetState();
-}
+    showDialog(
+      context: context,
+      builder: (context) => MiniUserProfileDialog(
+        userProfile: userProfile,
+        onRelationToggle: () async {
+          try {
+            final newRelation = await Utils.toggleFollowStatus(userProfile);
+            return newRelation;
+          } catch (e) {
+            print(e);
+            return UserRelation(isFollowing: false, isFriend: false);
+          }
+        },
+        onMessage: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChatPage(
+                currentUserId: SocketService.instance.userId,
+                otherUserId: userProfile.id,
+              ),
+            ),
+          );
 
-class _ParticipantVideoWidgetState extends State<ParticipantVideoWidget> {
-  late VlcPlayerController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VlcPlayerController.network(
-      widget.streamUrl,
-      hwAcc: HwAcc.full,
-      autoPlay: true,
-      options: VlcPlayerOptions(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.stop();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return VlcPlayer(
-      controller: _controller,
-      aspectRatio: 9 / 16,
-      placeholder: const Center(child: CircularProgressIndicator()),
+        },
+      ),
     );
   }
 }

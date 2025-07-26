@@ -17,8 +17,11 @@ class LiveComment {
     required this.createdAt,
   });
 
-  factory LiveComment.fromJson(Map<String, dynamic> json) =>
-      _$LiveCommentFromJson(json);
+  factory LiveComment.fromJson(Map<String, dynamic> json) {
+
+    return _$LiveCommentFromJson(json);
+  }
+
 
   Map<String, dynamic> toJson() => _$LiveCommentToJson(this);
 }

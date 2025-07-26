@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:probashi_live/ui/audience_page.dart';
 import 'package:probashi_live/utils/api_service.dart';
-import 'package:probashi_live/utils/socket_service.dart';  // Import your socket service
+import 'package:probashi_live/utils/socket_service.dart'; // Import your socket service
+import 'package:probashi_live/utils/utils.dart';
 
 import '../models/announcement_model.dart';
 import '../models/live_session.dart';
@@ -17,7 +18,8 @@ class HomeTabView extends StatefulWidget {
   State<HomeTabView> createState() => _HomeTabViewState();
 }
 
-class _HomeTabViewState extends State<HomeTabView> with TickerProviderStateMixin {
+class _HomeTabViewState extends State<HomeTabView>
+    with TickerProviderStateMixin {
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
   Announcement? _latestAnnouncement;
@@ -45,9 +47,12 @@ class _HomeTabViewState extends State<HomeTabView> with TickerProviderStateMixin
 
   Future<void> _fetchAnnouncement() async {
     try {
-      final announcements = await ApiService.getApiClient().getAllAnnouncements();
+      final announcements = await ApiService.getApiClient()
+          .getAllAnnouncements();
       setState(() {
-        _latestAnnouncement = announcements.isNotEmpty ? announcements.first : null;
+        _latestAnnouncement = announcements.isNotEmpty
+            ? announcements.first
+            : null;
       });
     } catch (e) {
       print(e);
@@ -116,7 +121,7 @@ class _HomeTabViewState extends State<HomeTabView> with TickerProviderStateMixin
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: CustomTabBar(
             selectedIndex: _tabController.index,
-            tabs: ["Freshers", "Popular", "Spotlight", "Party", "PK Matches"],
+            tabs: ["Lives", "Games"],
             onTap: (index) {
               setState(() {
                 _tabController.index = index;
@@ -147,10 +152,7 @@ class _HomeTabViewState extends State<HomeTabView> with TickerProviderStateMixin
                 const SizedBox(height: 4),
                 Text(
                   _latestAnnouncement!.message,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
               ],
             ),
@@ -178,9 +180,6 @@ class _HomeTabViewState extends State<HomeTabView> with TickerProviderStateMixin
           ),
         ),
 
-
-
-
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -198,195 +197,109 @@ class _HomeTabViewState extends State<HomeTabView> with TickerProviderStateMixin
                     ? const Center(child: CircularProgressIndicator())
                     : _liveSessions.isEmpty
                     ? ListView(
-                  // ListView is needed for RefreshIndicator to work when empty
-                  children: [
-                    SizedBox(height: 200),
-                    Center(
-                      child: Text(
-                        "No live sessions found",
-                        style: TextStyle(color: Colors.white70, fontSize: 16),
-                      ),
-                    ),
-                  ],
-                )
+                        // ListView is needed for RefreshIndicator to work when empty
+                        children: [
+                          SizedBox(height: 200),
+                          Center(
+                            child: Text(
+                              "No live sessions found",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
                     : Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: MasonryGridView.count(
-                    controller: _scrollController,
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    itemCount: _liveSessions.length,
-                    itemBuilder: (context, i) {
-                      final liveSession = _liveSessions[i];
-                      final hostUser = liveSession.hosts.isNotEmpty
-                          ? liveSession.hosts.first.user
-                          : null;
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: MasonryGridView.count(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          controller: _scrollController,
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          itemCount: _liveSessions.length,
+                          itemBuilder: (context, i) {
+                            final liveSession = _liveSessions[i];
+                            final hostUser = liveSession.hosts.isNotEmpty
+                                ? liveSession.hosts.first.user
+                                : null;
 
-                      return GestureDetector(
-                        onTap: () {
-                          if (hostUser != null) {
+                            return GestureDetector(
+                              onTap: () {
+                                if (hostUser != null) {
+                                  String url =
+                                      "${Variables.RTMP_URL}/${liveSession.hosts.first.user.id}";
+                                  print(url);
 
-                            String url = "${Variables.RTMP_URL}/${liveSession.hosts.first.user.id}";
-                            print(url);
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => AudiencePage(
-                                    liveSession: liveSession),
+                                  Utils.printGreenComment(liveSession.toJson().toString());
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => AudiencePage(
+                                        liveSession: liveSession,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white12,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.all(8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: hostUser?.profilePic != null
+                                          ? Image.network(
+                                              hostUser!.profilePic,
+                                              height: 120,
+                                              width: double.infinity,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Container(
+                                              height: 120,
+                                              color: Colors.grey,
+                                              child: const Center(
+                                                child: Icon(
+                                                  Icons.person,
+                                                  size: 50,
+                                                ),
+                                              ),
+                                            ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      hostUser?.name ?? "Unknown Host",
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "Live Now",
+                                      style: TextStyle(
+                                        color: Colors.redAccent.shade200,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
-                          }
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white12,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.all(8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: hostUser?.profilePic != null
-                                    ? Image.network(
-                                  hostUser!.profilePic,
-                                  height: 120,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                )
-                                    : Container(
-                                  height: 120,
-                                  color: Colors.grey,
-                                  child: const Center(
-                                    child: Icon(Icons.person,
-                                        size: 50),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                hostUser?.name ?? "Unknown Host",
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Live Now",
-                                style: TextStyle(
-                                  color: Colors.redAccent.shade200,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
               );
             }),
           ),
         ),
-
-
-
-
-
-
-
-
-        // Expanded(
-        //   child: TabBarView(
-        //     controller: _tabController,
-        //     children: List.generate(5, (index) {
-        //       if (_loadingLiveSessions) {
-        //         return const Center(child: CircularProgressIndicator());
-        //       }
-        //
-        //       if (_liveSessions.isEmpty) {
-        //         return const Center(child: Text("No live sessions found", style: TextStyle(color: Colors.white70)));
-        //       }
-        //
-        //       return Padding(
-        //         padding: const EdgeInsets.symmetric(horizontal: 12),
-        //         child: MasonryGridView.count(
-        //           controller: _scrollController,
-        //           crossAxisCount: 2,
-        //           mainAxisSpacing: 12,
-        //           crossAxisSpacing: 12,
-        //           itemCount: _liveSessions.length,
-        //           itemBuilder: (context, i) {
-        //             final liveSession = _liveSessions[i];
-        //             final hostUser = liveSession.hosts.isNotEmpty ? liveSession.hosts.first.user : null;
-        //
-        //             return GestureDetector(
-        //               onTap: () {
-        //                 if (hostUser != null) {
-        //                   Navigator.of(context).push(
-        //                     MaterialPageRoute(
-        //                       builder: (_) => AudiencePage(liveSession: liveSession,),
-        //                     ),
-        //                   );
-        //                 }
-        //               },
-        //               child: Container(
-        //                 decoration: BoxDecoration(
-        //                   color: Colors.white12,
-        //                   borderRadius: BorderRadius.circular(12),
-        //                 ),
-        //                 padding: const EdgeInsets.all(8),
-        //                 child: Column(
-        //                   crossAxisAlignment: CrossAxisAlignment.start,
-        //                   children: [
-        //                     ClipRRect(
-        //                       borderRadius: BorderRadius.circular(10),
-        //                       child: hostUser?.profilePic != null
-        //                           ? Image.network(
-        //                         hostUser!.profilePic,
-        //                         height: 120,
-        //                         width: double.infinity,
-        //                         fit: BoxFit.cover,
-        //                       )
-        //                           : Container(
-        //                         height: 120,
-        //                         color: Colors.grey,
-        //                         child: const Center(
-        //                           child: Icon(Icons.person, size: 50),
-        //                         ),
-        //                       ),
-        //                     ),
-        //                     const SizedBox(height: 8),
-        //                     Text(
-        //                       hostUser?.name ?? "Unknown Host",
-        //                       style: const TextStyle(
-        //                         color: Colors.white,
-        //                         fontWeight: FontWeight.bold,
-        //                         fontSize: 16,
-        //                       ),
-        //                     ),
-        //                     const SizedBox(height: 4),
-        //                     Text(
-        //                       "Live Now",
-        //                       style: TextStyle(
-        //                         color: Colors.redAccent.shade200,
-        //                         fontWeight: FontWeight.bold,
-        //                       ),
-        //                     ),
-        //                   ],
-        //                 ),
-        //               ),
-        //             );
-        //           },
-        //         ),
-        //       );
-        //     }),
-        //   ),
-        // ),
       ],
     );
   }

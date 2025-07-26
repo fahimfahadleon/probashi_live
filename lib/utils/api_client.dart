@@ -26,8 +26,8 @@ abstract class ApiClient {
   Future<UserProfile> getUserProfile(@Path("id") String userId);
 
   //used
-  @GET("/friends/stats")
-  Future<UserStats> getMyStats();
+  @GET("/friends/stats/{id}")
+  Future<UserStats> getUserStats(@Path("id") String userId);
 
   //used
   @POST("/payment/request-payment")
@@ -46,4 +46,12 @@ abstract class ApiClient {
 //used
   @GET("/offer/get-all")
   Future<List<Offer>> getOffers();
+
+
+  @POST("/friends/follow/{userId}")
+  Future<void> followUser(@Path("userId") String userId);
+
+  @DELETE("/friends/unfollow/{userId}")
+  Future<void> unfollowUser(@Path("userId") String userId);
+
 }

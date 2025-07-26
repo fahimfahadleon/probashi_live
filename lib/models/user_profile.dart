@@ -20,8 +20,8 @@ class UserProfile {
   final DateTime updatedAt;   // Added this field
 
   // If you want to include stats and relation, you can keep them or remove if not needed
-  final UserStats? stats;
-  final UserRelation? relation;
+   UserStats? stats;
+   UserRelation? relation;
 
   UserProfile({
     required this.id,

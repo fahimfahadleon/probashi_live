@@ -19,12 +19,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedBottomNavIndex = 0;
   final socketService = SocketService.instance;
+  bool _hasNewMessage = false;
 
   final List<Widget> _pages = const [
     HomeTabView(),
     ShortsTabView(),
     VideoTabView(),
-    MessageTabView(),
+    ChatInboxPage(),
     ProfileTabView(),
   ];
 
@@ -49,6 +50,14 @@ class _HomePageState extends State<HomePage> {
         });
       });
 
+      socketService.onNewMessage((message){
+        if (_selectedBottomNavIndex != 3) {
+          setState(() {
+            _hasNewMessage = true;
+          });
+        }
+      });
+
 
     }
   }
@@ -56,6 +65,7 @@ class _HomePageState extends State<HomePage> {
   void _onBottomNavTap(int index) {
     setState(() {
       _selectedBottomNavIndex = index;
+      if (index == 3) _hasNewMessage = false;
     });
   }
 
@@ -90,9 +100,14 @@ class _HomePageState extends State<HomePage> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(icon: Icons.home, label: "Live", index: 0),
-                _buildNavItem(icon: Icons.camera_alt, label: "Shorts", index: 1),
+                _buildNavItem(icon: Icons.camera_alt, label: "Games", index: 1),
                 const SizedBox(width: 40),
-                _buildNavItem(icon: Icons.message, label: "Message", index: 3),
+                _buildNavItem(
+                  icon: Icons.message,
+                  label: "Message",
+                  index: 3,
+                  showDot: _hasNewMessage,
+                ),
                 _buildNavItem(icon: Icons.person, label: "Profile", index: 4),
               ],
             ),
@@ -118,15 +133,34 @@ class _HomePageState extends State<HomePage> {
     required IconData icon,
     required String label,
     required int index,
+    bool showDot = false,
   }) {
     final isSelected = _selectedBottomNavIndex == index;
+
     return GestureDetector(
       onTap: () => _onBottomNavTap(index),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: isSelected ? Colors.amberAccent : Colors.white70),
+          Stack(
+            children: [
+              Icon(icon, color: isSelected ? Colors.amberAccent : Colors.white70),
+              if (showDot)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           Text(
             label,
             style: TextStyle(
@@ -138,4 +172,5 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
 }

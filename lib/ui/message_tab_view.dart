@@ -1,8 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:probashi_live/models/chat_inbox_entry.dart';
 import '../models/chat_inbox_user.dart';
 import '../utils/socket_service.dart';
+import 'cached_circle_avatar.dart';
 import 'one_to_one_chat.dart';
 import 'package:intl/intl.dart';
 
@@ -89,10 +89,9 @@ class _ChatInboxPageState extends State<ChatInboxPage> {
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    backgroundImage: CachedNetworkImageProvider(item.user.profilePic ?? ''),
-                    radius: 25,
-                  ),
+
+                  CachedCircleAvatar(imageUrl: item.user.profilePic, radius: 25,),
+
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

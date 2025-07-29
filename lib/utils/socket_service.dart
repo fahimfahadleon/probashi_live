@@ -5,6 +5,7 @@ import 'package:probashi_live/utils/variables.dart';
 import '../models/chat_history_response.dart';
 import '../models/chat_inbox_entry.dart';
 import '../models/chat_message.dart';
+import '../models/gift.dart';
 import '../models/live_comment.dart';
 import '../models/live_gift.dart';
 import '../models/live_session.dart';
@@ -165,6 +166,17 @@ class SocketService {
     });
   }
 
+
+  void sendGift(LiveGift gift) {
+    if (!isConnected || currentSessionId == null || userId.isEmpty) {
+      print("Cannot send gift: Missing session or user info");
+      return;
+    }
+    socket.emit('send_gift', gift.toJson());
+    print("Gift sent: ${gift.toJson().toString()}");
+  }
+
+
   void getChatInbox() {
     socket.emit('get_chat_inbox', {'userId': userId});
   }
@@ -201,7 +213,7 @@ class SocketService {
   void Function(LiveUser participant)? _participantLeftCallback;
   void Function(Map<String, dynamic> audience)? _audienceJoinedCallback;
   void Function(Map<String, dynamic> audience)? _audienceLeftCallback;
-  void Function(LiveGift gift)? _giftReceivedCallback;
+  void Function(Map<String, dynamic> audience)? _giftReceivedCallback;
   void Function(ChatMessage message)? _newMessageCallback;
   void Function(ChatHistoryResponse response)? _chatHistoryCallback;
 
@@ -239,7 +251,7 @@ class SocketService {
     _audienceLeftCallback = callback;
   }
 
-  void onGiftReceived(void Function(LiveGift gift) callback) {
+  void onGiftReceived(void Function(Map<String, dynamic> audience) callback) {
     _giftReceivedCallback = callback;
   }
 
@@ -342,9 +354,8 @@ class SocketService {
     });
 
     socket.on('gift_received', (giftJson) {
-      final gift = LiveGift.fromJson(giftJson);
-      print('Gift received: ${gift.giftType}');
-      _giftReceivedCallback?.call(gift);
+      Utils.printGreenComment(giftJson.toString());
+      _giftReceivedCallback?.call(giftJson);
     });
 
     socket.on(ACTIVE_LIVE_SESSIONS, (data) {
@@ -367,6 +378,14 @@ class SocketService {
     socket.on('connect_error', (error) {
       print('Connection error: $error');
       isConnected = false;
+    });
+
+    socket.on('error', (data) {
+      final code = data['code'];
+      final message = data['message'];
+
+      print(message);
+      // Show specific UI or messages based on code
     });
 
 

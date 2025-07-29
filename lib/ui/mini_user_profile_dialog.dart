@@ -1,6 +1,6 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
+import 'cached_circle_avatar.dart';
 
 class MiniUserProfileDialog extends StatefulWidget {
   final UserProfile userProfile;
@@ -46,10 +46,9 @@ class _MiniUserProfileDialogState extends State<MiniUserProfileDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              radius: 40,
-              backgroundImage: CachedNetworkImageProvider(user.profilePic),
-            ),
+
+            CachedCircleAvatar(imageUrl: user.profilePic, radius: 40,),
+
             const SizedBox(height: 12),
             Text(
               user.name,

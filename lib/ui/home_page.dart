@@ -100,7 +100,7 @@ class _HomePageState extends State<HomePage> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(icon: Icons.home, label: "Live", index: 0),
-                _buildNavItem(icon: Icons.camera_alt, label: "Games", index: 1),
+                _buildNavItem(icon: Icons.videogame_asset, label: "Games", index: 1),
                 const SizedBox(width: 40),
                 _buildNavItem(
                   icon: Icons.message,

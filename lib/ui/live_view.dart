@@ -1,10 +1,11 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:probashi_live/models/live_session.dart';
 import 'package:probashi_live/ui/participant_video_widget.dart';
+import 'package:svgaplayer_flutter/player.dart';
 
+import '../models/gift.dart';
 import '../models/user_profile.dart';
 import '../services/generic_system_service.dart';
 import '../utils/api_service.dart';
@@ -14,6 +15,7 @@ import '../utils/variables.dart';
 
 import '../models/live_comment.dart'; // your model imports
 import '../models/live_user.dart';
+import 'cached_circle_avatar.dart';
 import 'mini_user_profile_dialog.dart';
 import 'one_to_one_chat.dart';
 
@@ -24,7 +26,7 @@ class LivePage extends StatefulWidget {
   State<LivePage> createState() => _LivePageState();
 }
 
-class _LivePageState extends State<LivePage> {
+class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   bool isStreaming = false;
   bool isMicOn = true;
   bool isCameraOn = true;
@@ -41,10 +43,44 @@ class _LivePageState extends State<LivePage> {
   int viewerCount = 0;
   late String profilePicture = "https://api.dicebear.com/7.x/identicon/png?seed=default";
 
+  SVGAAnimationController? _svgaController;
+  bool _showGiftAnimation = false;
+  String _giftSenderName = '';
+  String _giftReceiverName = '';
+
+
+
 
   @override
   void initState() {
     super.initState();
+
+    _svgaController = SVGAAnimationController(vsync: this);
+
+    SocketService.instance.onGiftReceived((gift1) async {
+      final gift = Gift.fromJson(gift1['gift']);
+      final fromUser = UserProfile.fromJson(gift1['fromUser']);
+      final toUser = UserProfile.fromJson(gift1['toUser']);
+
+      final url = Variables.BASE_URL + gift.imageUrl;
+      final videoItem = await Utils.getCachedSvga(url);
+      if (!mounted || videoItem == null) return;
+
+      setState(() {
+        _svgaController!.videoItem = videoItem;
+        _showGiftAnimation = true;
+        _giftSenderName = fromUser.name;
+        _giftReceiverName = toUser.name;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _svgaController!.reset();
+        _svgaController!.repeat(count: 1).whenComplete(() {
+          if (!mounted) return;
+          setState(() => _showGiftAnimation = false);
+        });
+      });
+    });
 
     // Typed model callbacks
     SocketService.instance.onNewComment((comment) {
@@ -225,6 +261,7 @@ class _LivePageState extends State<LivePage> {
     setState(() => showControlsPanel = !showControlsPanel);
   }
 
+
   void _inviteParticipant() {
     // TODO: Implement invite logic
   }
@@ -290,11 +327,12 @@ class _LivePageState extends State<LivePage> {
 
   @override
   void dispose() {
+    _svgaController?.dispose();
+    _chatController.dispose();
     if (isStreaming) {
       GenericStreamService.stopStream();
       SocketService.instance.leaveLive();
     }
-    _chatController.dispose();
     super.dispose();
   }
 
@@ -311,6 +349,80 @@ class _LivePageState extends State<LivePage> {
       body: Stack(
         children: [
           Positioned.fill(child: _buildStreamGrid()),
+
+
+          if (_showGiftAnimation)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: true,
+                child: Center(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // SVGA Animation
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width,
+                        height: MediaQuery.of(context).size.height,
+                        child: SVGAImage(_svgaController!),
+                      ),
+
+                      // Floating Text at 20% screen height
+                      Positioned(
+                        top: MediaQuery.of(context).size.height * 0.1,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black45,
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: _giftSenderName,
+                                    style: const TextStyle(
+                                      color: Colors.orangeAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                  const TextSpan(
+                                    text: ' sent a gift to ',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: _giftReceiverName,
+                                    style: const TextStyle(
+                                      color: Colors.lightBlueAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           if (isStreaming) ...[
             Positioned(
@@ -338,11 +450,7 @@ class _LivePageState extends State<LivePage> {
                         print("Error loading profile: $e");
                       }
                     },
-                    child: CircleAvatar(
-                      radius: 20,
-                      backgroundImage: CachedNetworkImageProvider(profilePicture),
-                      backgroundColor: Colors.grey[700],
-                    ),
+                    child: CachedCircleAvatar(imageUrl: profilePicture, radius: 20,),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -433,13 +541,10 @@ class _LivePageState extends State<LivePage> {
 
                               _showMiniProfileDialog(profile);
                             },
-                            child: CircleAvatar(
-                              radius: 16,
-                              backgroundImage: CachedNetworkImageProvider(
-                                c.liveUser.user.profilePic,
-                              ),
-                              backgroundColor: Colors.grey[800],
-                            ),
+                            child:
+
+                            CachedCircleAvatar(imageUrl: c.liveUser.user.profilePic,radius: 16,),
+
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -581,6 +686,9 @@ class _LivePageState extends State<LivePage> {
                         color: Colors.white,
                       ),
                     ),
+
+
+
                     IconButton(
                       onPressed: _toggleControlsPanel,
                       icon: Icon(

@@ -7,6 +7,7 @@ import 'package:probashi_live/utils/socket_service.dart';
 
 import '../models/offer.dart';
 import '../models/user_profile.dart';
+import '../utils/variables.dart';
 import 'offer_details_view.dart';
 
 class ProfileTabView extends StatefulWidget {
@@ -28,8 +29,34 @@ class _MyPageState extends State<ProfileTabView> {
   void initState() {
     super.initState();
     _futureProfile = _loadProfile();
-    fetchUserStats(SocketService.instance.userId);
+    _futureProfile.then((profile) async {
+      await fetchUserStats(profile.id);
+      fetchOffers();
+    });
+  }
+
+  Future<void> _initData() async {
+    final profile = await _loadProfile(); // sets Variables.currentUser
+    await fetchUserStats(profile.id);     // now you are safe
     fetchOffers();
+  }
+
+  Future<UserProfile> _loadProfile() async {
+    UserProfile profile =  await ApiService.getApiClient().getMyProfile();
+    Variables.currentUser = profile;
+    return profile;
+  }
+
+  Future<void> fetchUserStats(String userId) async {
+    try {
+      final stats = await ApiService.getApiClient().getUserStats(userId);
+      Variables.currentUser?.stats = stats;
+      setState(() {
+        _status = stats;
+      });
+    } catch (e) {
+      print('Error fetching stats: $e');
+    }
   }
 
   Future<void> fetchOffers() async {
@@ -59,20 +86,7 @@ class _MyPageState extends State<ProfileTabView> {
     super.dispose();
   }
 
-  Future<UserProfile> _loadProfile() async {
-    return   await ApiService.getApiClient().getMyProfile();
-  }
 
-  Future<void> fetchUserStats(String userId) async {
-    try {
-      final stats = await ApiService.getApiClient().getUserStats(userId);
-      setState(() {
-        _status = stats;
-      });
-    } catch (e) {
-      print('Error fetching stats: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

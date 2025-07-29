@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:probashi_live/models/user_profile.dart';
 import 'package:probashi_live/utils/api_service.dart';
 import 'package:probashi_live/utils/utils.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/chat_history_response.dart';
 import '../models/chat_message.dart';
 import '../utils/socket_service.dart';
+import 'cached_circle_avatar.dart';
 
 class ChatPage extends StatefulWidget {
   final String currentUserId;
@@ -265,15 +265,6 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget userAvatar(String? imageUrl) {
-    return CircleAvatar(
-      radius: 16,
-      backgroundImage: imageUrl != null && imageUrl.isNotEmpty
-          ? CachedNetworkImageProvider(imageUrl)
-          : null,
-      backgroundColor: Colors.grey.shade300,
-      child: imageUrl == null || imageUrl.isEmpty
-          ? const Icon(Icons.person, size: 16, color: Colors.white)
-          : null,
-    );
+    return CachedCircleAvatar(imageUrl: imageUrl);
   }
 }

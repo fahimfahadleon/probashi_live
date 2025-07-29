@@ -1,10 +1,15 @@
-import 'package:cached_network_image/cached_network_image.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/src/scheduler/ticker.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
+import 'package:probashi_live/models/live_gift.dart';
 import 'package:probashi_live/models/live_session.dart';
 import 'package:probashi_live/ui/participant_video_widget.dart';
+import 'package:svgaplayer_flutter/parser.dart';
+import 'package:svgaplayer_flutter/player.dart';
 
+import '../models/gift.dart';
 import '../models/live_comment.dart';
 import '../models/live_user.dart';
 import '../models/user_profile.dart';
@@ -12,6 +17,8 @@ import '../utils/api_service.dart';
 import '../utils/socket_service.dart';
 import '../utils/utils.dart';
 import '../utils/variables.dart';
+import 'cached_circle_avatar.dart';
+import 'gift_dialog.dart';
 import 'mini_user_profile_dialog.dart';
 import 'one_to_one_chat.dart';
 
@@ -31,17 +38,34 @@ class AudiencePage extends StatefulWidget {
   State<AudiencePage> createState() => _AudiencePageState();
 }
 
-class _AudiencePageState extends State<AudiencePage> {
+class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMixin {
   final TextEditingController _chatController = TextEditingController();
   final List<LiveComment> comments = [];
   final List<LiveUser> participants = [];
 
   late VlcPlayerController _mainStreamController;
 
+
+  SVGAAnimationController? _svgaController;
+  bool _showGiftAnimation = false;
+
+  String _giftSenderName = "";  // store sender username
+  String _giftReceiverName = "";
+
+
   bool showCommentList = true;
   bool showControlsPanel = false;
 
   int viewerCount = 0;
+
+  void showGiftDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => GiftDialog(onGiftClick: (gift){
+        sendGift(gift);
+      },),
+    );
+  }
 
 
   @override
@@ -56,6 +80,7 @@ class _AudiencePageState extends State<AudiencePage> {
       options: VlcPlayerOptions(),
     );
 
+    _svgaController = SVGAAnimationController(vsync: this);
     SocketService.instance.joinAudience(widget.sessionId);
 
     SocketService.instance.onNewComment((comment) {
@@ -95,6 +120,35 @@ class _AudiencePageState extends State<AudiencePage> {
         viewerCount = session.audience.length;
       });
     });
+
+    SocketService.instance.onGiftReceived((gift1) async {
+      final gift = Gift.fromJson(gift1['gift']);
+      final fromUser = UserProfile.fromJson(gift1['fromUser']);
+      final toUser = UserProfile.fromJson(gift1['toUser']);
+
+      final url = Variables.BASE_URL + gift.imageUrl;
+      final videoItem = await Utils.getCachedSvga(url); // Use cached loader here
+      if (!mounted || videoItem == null) return;
+
+      setState(() {
+        _svgaController!.videoItem = videoItem;
+        _showGiftAnimation = true;
+        _giftSenderName = fromUser.name;
+        _giftReceiverName = toUser.name;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _svgaController!
+            .reset();
+        _svgaController!
+            .repeat(count: 1)
+            .whenComplete(() {
+          if (!mounted) return;
+          setState(() => _showGiftAnimation = false);
+        });
+      });
+    });
+
   }
 
   @override
@@ -103,6 +157,7 @@ class _AudiencePageState extends State<AudiencePage> {
     _mainStreamController.stop();
     _mainStreamController.dispose();
     _chatController.dispose();
+    _svgaController?.dispose();
     super.dispose();
   }
 
@@ -112,6 +167,11 @@ class _AudiencePageState extends State<AudiencePage> {
       SocketService.instance.sendComment(msg);
       _chatController.clear();
     }
+  }
+  
+  void sendGift(Gift gift){
+    LiveGift liveGift = LiveGift(toUserId: widget.hostUserId, sessionId: widget.sessionId, giftId: gift.id);
+    SocketService.instance.sendGift(liveGift);
   }
 
   Widget _buildStreamGrid() {
@@ -186,11 +246,9 @@ class _AudiencePageState extends State<AudiencePage> {
                       print("Error loading profile: $e");
                     }
                   },
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundImage: CachedNetworkImageProvider(widget.liveSession.hosts.first.user.profilePic),
-                    backgroundColor: Colors.grey[700],
-                  ),
+                  child:
+                  CachedCircleAvatar(imageUrl: widget.liveSession.hosts.first.user.profilePic, radius: 20,),
+
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -229,6 +287,78 @@ class _AudiencePageState extends State<AudiencePage> {
               ],
             ),
           ),
+          if (_showGiftAnimation)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: true,
+                child: Center(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // SVGA Animation
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width,
+                        height: MediaQuery.of(context).size.height,
+                        child: SVGAImage(_svgaController!),
+                      ),
+
+                      // Floating Text at 20% screen height
+                      Positioned(
+                        top: MediaQuery.of(context).size.height * 0.1,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black45,
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: _giftSenderName,
+                                    style: const TextStyle(
+                                      color: Colors.orangeAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                  const TextSpan(
+                                    text: ' sent a gift to ',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: _giftReceiverName,
+                                    style: const TextStyle(
+                                      color: Colors.lightBlueAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // Comment list
           if (showCommentList)
@@ -276,13 +406,10 @@ class _AudiencePageState extends State<AudiencePage> {
                               _showMiniProfileDialog(profile);
                             }
                           },
-                          child: CircleAvatar(
-                            radius: 16,
-                            backgroundImage: CachedNetworkImageProvider(
-                              c.liveUser.user.profilePic,
-                            ),
-                            backgroundColor: Colors.grey[800],
-                          ),
+                          child:
+                          CachedCircleAvatar(imageUrl:  c.liveUser.user.profilePic,radius: 16,),
+
+
                         ),
                         const SizedBox(width: 8),
 
@@ -383,6 +510,14 @@ class _AudiencePageState extends State<AudiencePage> {
                     ),
                   ),
                   IconButton(
+                    onPressed: showGiftDialog,
+                    icon: Icon(
+                      Icons.wallet_giftcard,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                  IconButton(
                     onPressed: () =>
                         setState(() => showControlsPanel = !showControlsPanel),
                     icon: Icon(
@@ -437,4 +572,6 @@ class _AudiencePageState extends State<AudiencePage> {
       ),
     );
   }
+
+
 }

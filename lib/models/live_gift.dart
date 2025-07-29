@@ -1,24 +1,17 @@
 import 'package:json_annotation/json_annotation.dart';
-import 'live_user.dart';
 
 part 'live_gift.g.dart';
 
-@JsonSerializable(explicitToJson: true)
+@JsonSerializable()
 class LiveGift {
-  final String id;
-  final LiveUser fromUser;
-  final LiveUser toUser;
-  final String giftType;
-  final int diamondCount;
-  final DateTime createdAt;
+  final String toUserId;
+  final String sessionId;
+  final String giftId;
 
   LiveGift({
-    required this.id,
-    required this.fromUser,
-    required this.toUser,
-    required this.giftType,
-    required this.diamondCount,
-    required this.createdAt,
+    required this.toUserId,
+    required this.sessionId,
+    required this.giftId,
   });
 
   factory LiveGift.fromJson(Map<String, dynamic> json) =>

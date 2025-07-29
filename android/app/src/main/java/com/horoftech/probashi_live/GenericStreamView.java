@@ -84,7 +84,7 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
         Log.e("width",String.valueOf(width));
         Log.e("height",String.valueOf(height));
 
-        boolean prepared =  genericStream.prepareVideo(1920,1080,bitrate,60,2,90)
+        boolean prepared =  genericStream.prepareVideo(1920,1080,bitrate,28,2,90)
                 && genericStream.prepareAudio(
                 44100,     // sampleRate
                 true,      // isStereo
@@ -112,13 +112,13 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
 
     public void switchCamera() {
         VideoSource videoSource = genericStream.getVideoSource();
-
-        if (videoSource instanceof CameraXSource) {
-            ((CameraXSource) videoSource).switchCamera();
-        } else if (videoSource instanceof Camera1Source) {
-            ((Camera1Source) videoSource).switchCamera();
-        } else if (videoSource instanceof Camera2Source) {
+        if (videoSource instanceof Camera2Source) {
             ((Camera2Source) videoSource).switchCamera();
+        }
+        else if (videoSource instanceof Camera1Source) {
+            ((Camera1Source) videoSource).switchCamera();
+        } else  if (videoSource instanceof CameraXSource) {
+            ((CameraXSource) videoSource).switchCamera();
         }
         Toast.makeText(context, "switch camera called", Toast.LENGTH_SHORT).show();
     }

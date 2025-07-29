@@ -5,6 +5,7 @@ import 'package:retrofit/http.dart';
 import 'dart:async';
 import '../models/announcement_model.dart';
 import '../models/create_payment_dto.dart';
+import '../models/gift_category.dart';
 import '../models/login_response.dart';
 import '../models/offer.dart';
 import '../models/user_profile.dart';
@@ -53,5 +54,9 @@ abstract class ApiClient {
 
   @DELETE("/friends/unfollow/{userId}")
   Future<void> unfollowUser(@Path("userId") String userId);
+
+
+  @GET("/gifts/by-category")
+  Future<List<Category>> getAllCategoriesWithGifts();
 
 }

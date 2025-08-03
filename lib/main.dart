@@ -16,8 +16,6 @@ class MyApp extends StatelessWidget {
     final storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
 
-    // TODO: optionally verify token with API before trusting it
-
     return token != null && token.isNotEmpty;
   }
 

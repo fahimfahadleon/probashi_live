@@ -1,12 +1,7 @@
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/src/scheduler/ticker.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:probashi_live/models/live_gift.dart';
 import 'package:probashi_live/models/live_session.dart';
-import 'package:probashi_live/ui/participant_video_widget.dart';
-import 'package:svgaplayer_flutter/parser.dart';
+import 'package:probashi_live/ui/decorated_participant_view.dart';
 import 'package:svgaplayer_flutter/player.dart';
 
 import '../models/gift.dart';
@@ -28,7 +23,6 @@ class AudiencePage extends StatefulWidget {
   final String hostUserId;
   final String streamerName;
 
-
   AudiencePage({required this.liveSession, super.key})
     : sessionId = liveSession.id,
       hostUserId = liveSession.hosts.first.user.id,
@@ -38,51 +32,39 @@ class AudiencePage extends StatefulWidget {
   State<AudiencePage> createState() => _AudiencePageState();
 }
 
-class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMixin {
+class _AudiencePageState extends State<AudiencePage>
+    with TickerProviderStateMixin {
   final TextEditingController _chatController = TextEditingController();
   final List<LiveComment> comments = [];
   final List<LiveUser> participants = [];
 
-  late VlcPlayerController _mainStreamController;
-
-
   SVGAAnimationController? _svgaController;
   bool _showGiftAnimation = false;
 
-  String _giftSenderName = "";  // store sender username
+  String _giftSenderName = ""; // store sender username
   String _giftReceiverName = "";
-
 
   bool showCommentList = true;
   bool showControlsPanel = false;
 
   int viewerCount = 0;
 
-  void showGiftDialog() {
+  void showGiftDialog(String toUserId) {
     showDialog(
       context: context,
-      builder: (_) => GiftDialog(onGiftClick: (gift){
-        sendGift(gift);
-      },),
+      builder: (_) => GiftDialog(
+        onGiftClick: (gift) {
+          sendGift(gift, toUserId);
+        },
+      ),
     );
   }
-
 
   @override
   void initState() {
     super.initState();
-
-    final mainStreamUrl = "${Variables.RTMP_URL}/${widget.hostUserId}";
-    _mainStreamController = VlcPlayerController.network(
-      mainStreamUrl,
-      hwAcc: HwAcc.full,
-      autoPlay: true,
-      options: VlcPlayerOptions(),
-    );
-
     _svgaController = SVGAAnimationController(vsync: this);
     SocketService.instance.joinAudience(widget.sessionId);
-
     SocketService.instance.onNewComment((comment) {
       setState(() {
         Utils.printGreenComment(comment.message);
@@ -91,7 +73,7 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
     });
 
     SocketService.instance.onParticipantJoined((participant) {
-      setState(() => participants.add(participant));
+      // setState(() => participants.add(participant));
     });
 
     SocketService.instance.onParticipantLeft((participant) {
@@ -118,6 +100,7 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
       // Update your session data if needed
       setState(() {
         viewerCount = session.audience.length;
+        participants.addAll(session.participants);
       });
     });
 
@@ -127,7 +110,9 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
       final toUser = UserProfile.fromJson(gift1['toUser']);
 
       final url = Variables.BASE_URL + gift.imageUrl;
-      final videoItem = await Utils.getCachedSvga(url); // Use cached loader here
+      final videoItem = await Utils.getCachedSvga(
+        url,
+      ); // Use cached loader here
       if (!mounted || videoItem == null) return;
 
       setState(() {
@@ -138,24 +123,18 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _svgaController!
-            .reset();
-        _svgaController!
-            .repeat(count: 1)
-            .whenComplete(() {
+        _svgaController!.reset();
+        _svgaController!.repeat(count: 1).whenComplete(() {
           if (!mounted) return;
           setState(() => _showGiftAnimation = false);
         });
       });
     });
-
   }
 
   @override
   void dispose() {
     SocketService.instance.leaveLive();
-    _mainStreamController.stop();
-    _mainStreamController.dispose();
     _chatController.dispose();
     _svgaController?.dispose();
     super.dispose();
@@ -168,45 +147,137 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
       _chatController.clear();
     }
   }
-  
-  void sendGift(Gift gift){
-    LiveGift liveGift = LiveGift(toUserId: widget.hostUserId, sessionId: widget.sessionId, giftId: gift.id);
+
+  void sendGift(Gift gift, String toUserId) {
+    LiveGift liveGift = LiveGift(
+      toUserId: toUserId,
+      sessionId: widget.sessionId,
+      giftId: gift.id,
+    );
     SocketService.instance.sendGift(liveGift);
   }
 
   Widget _buildStreamGrid() {
-    List<Widget> videoWidgets = [
-      AspectRatio(
+    final mainStreamUrl = "${Variables.RTMP_URL}/${widget.hostUserId}";
+
+    // If no participants, show only host
+    if (participants.isEmpty) {
+      return AspectRatio(
         aspectRatio: 9 / 16,
-        child: VlcPlayer(
-          controller: _mainStreamController,
-          aspectRatio: 9 / 16,
-          placeholder: const Center(child: CircularProgressIndicator()),
+        child: DecoratedParticipantView(
+          streamUrl: mainStreamUrl,
+          avatarUrl: widget.liveSession.hosts.first.user.profilePic,
+          onProfileTap: () async {
+            UserStats stats = await ApiService.getApiClient().getUserStats(widget.hostUserId);
+            UserProfile profile = await ApiService.getApiClient().getUserProfile(widget.hostUserId);
+            profile.stats = stats;
+            _showMiniProfileDialog(profile);
+          },
+          onGiftTap: () => showGiftDialog(widget.hostUserId),
+          overlayText: widget.liveSession.hosts.first.user.name,
         ),
-      ),
-    ];
-
-    videoWidgets.addAll(
-      participants.map((p) {
-        final streamUrl = "${Variables.RTMP_URL}/${p.user.id}";
-        return AspectRatio(
-          aspectRatio: 9 / 16,
-          child: ParticipantVideoWidget(streamUrl: streamUrl),
-        );
-      }).toList(),
-    );
-
-    if (videoWidgets.length == 1) {
-      return videoWidgets.first;
+      );
     }
 
-    return GridView.count(
-      crossAxisCount: videoWidgets.length <= 2 ? 2 : 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: videoWidgets,
+    String participantid = participants.first.user.id;
+
+    // --- Top Row: Host + Self ---
+    final topRow = Row(
+      children: [
+        // Host
+        Expanded(
+          child: AspectRatio(
+            aspectRatio: 9 / 16,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16.0),
+              child: DecoratedParticipantView(
+                streamUrl: mainStreamUrl,
+                avatarUrl: widget.liveSession.hosts.first.user.profilePic,
+                onProfileTap: () async {
+                  UserStats stats = await ApiService.getApiClient().getUserStats(widget.hostUserId);
+                  UserProfile profile = await ApiService.getApiClient().getUserProfile(widget.hostUserId);
+                  profile.stats = stats;
+                  _showMiniProfileDialog(profile);
+                },
+                onGiftTap: () => showGiftDialog(widget.hostUserId),
+                overlayText: widget.liveSession.hosts.first.user.name,
+              ),
+            ),
+          ),
+        ),
+
+        // Self
+        Expanded(
+          child: AspectRatio(
+            aspectRatio: 9 / 16,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16.0),
+              child: DecoratedParticipantView(
+                streamUrl: "${Variables.RTMP_URL}/$participantid",
+                avatarUrl: participants.first.user.profilePic,
+                onProfileTap: () async {
+                  UserStats stats = await ApiService.getApiClient().getUserStats(participantid);
+                  UserProfile profile = await ApiService.getApiClient().getUserProfile(participantid);
+                  profile.stats = stats;
+                  _showMiniProfileDialog(profile);
+                },
+                onGiftTap: () => showGiftDialog(participantid),
+                overlayText: participants.first.user.name,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    // --- Guest participants: 3rd to 6th only ---
+    final guestParticipants = participants.skip(1).take(4).toList();
+
+    final guestRow = Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: List.generate(4, (index) {
+        if (index < guestParticipants.length) {
+          final p = guestParticipants[index];
+          final userId = p.user.id;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: AspectRatio(
+                aspectRatio: 9 / 16,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16.0),
+                  child: DecoratedParticipantView(
+                    streamUrl: "${Variables.RTMP_URL}/$userId",
+                    avatarUrl: p.user.profilePic,
+                    onProfileTap: () async {
+                      UserStats stats = await ApiService.getApiClient().getUserStats(userId);
+                      UserProfile profile = await ApiService.getApiClient().getUserProfile(userId);
+                      profile.stats = stats;
+                      _showMiniProfileDialog(profile);
+                    },
+                    onGiftTap: () => showGiftDialog(userId),
+                    overlayText: p.user.name,
+                  ),
+                ),
+              ),
+            ),
+          );
+        } else {
+          // Return empty space (invisible) for unused slots
+          return const Expanded(child: SizedBox.shrink());
+        }
+      }),
+    );
+
+    return Column(
+      children: [
+        topRow,
+        const SizedBox(height: 8),
+        guestParticipants.isNotEmpty ? guestRow : const SizedBox.shrink(),
+      ],
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -218,7 +289,15 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
       body: Stack(
         children: [
           // Always wrap stream in Positioned.fill
-          Positioned.fill(child: _buildStreamGrid()),
+          Positioned.fill(
+            child: Align(
+              alignment: const Alignment(0, -1),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 100),
+                child: _buildStreamGrid(),
+              ),
+            ),
+          ),
 
           // Streamer name + close button
           Positioned(
@@ -237,8 +316,10 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
 
                     try {
                       // Load stats and profile
-                      UserStats stats = await ApiService.getApiClient().getUserStats(tappedUserId);
-                      UserProfile profile = await ApiService.getApiClient().getUserProfile(tappedUserId);
+                      UserStats stats = await ApiService.getApiClient()
+                          .getUserStats(tappedUserId);
+                      UserProfile profile = await ApiService.getApiClient()
+                          .getUserProfile(tappedUserId);
                       profile.stats = stats;
 
                       _showMiniProfileDialog(profile);
@@ -246,9 +327,10 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                       print("Error loading profile: $e");
                     }
                   },
-                  child:
-                  CachedCircleAvatar(imageUrl: widget.liveSession.hosts.first.user.profilePic, radius: 20,),
-
+                  child: CachedCircleAvatar(
+                    imageUrl: widget.liveSession.hosts.first.user.profilePic,
+                    radius: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -266,7 +348,11 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.remove_red_eye, size: 14, color: Colors.white70),
+                          const Icon(
+                            Icons.remove_red_eye,
+                            size: 14,
+                            color: Colors.white70,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             "$viewerCount viewers",
@@ -282,7 +368,7 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed:()=> Navigator.pop(context),
+                  onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
@@ -309,9 +395,12 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                         right: 0,
                         child: Center(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
+                              color: Colors.black.withValues(alpha: (0.5 * 255).toDouble()),
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
@@ -379,7 +468,7 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                     ),
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: (0.5 * 255).toDouble()),
                       // placeholder bg color
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -391,25 +480,32 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                           onTap: () async {
                             if (c.liveUser.user.id !=
                                 SocketService.instance.userId) {
+                              Utils.printGreenComment(
+                                c.liveUser.user.toJson().toString(),
+                              );
 
-                              Utils.printGreenComment(c.liveUser.user.toJson().toString());
+                              if (c.liveUser.user.id == SocketService.instance.userId) {
+                                return;
+                              }
 
-                              if (c.liveUser.user.id == SocketService.instance.userId) return;
-
-                              UserStats state = await ApiService.getApiClient().getUserStats(c.liveUser.user.id);
+                              UserStats state = await ApiService.getApiClient()
+                                  .getUserStats(c.liveUser.user.id);
                               c.liveUser.user.stats = state;
 
-                              UserProfile profile = await ApiService.getApiClient().getUserProfile(c.liveUser.user.id);
-                              UserStats states = await ApiService.getApiClient().getUserStats(c.liveUser.user.id);
+                              UserProfile profile =
+                                  await ApiService.getApiClient()
+                                      .getUserProfile(c.liveUser.user.id);
+                              UserStats states = await ApiService.getApiClient()
+                                  .getUserStats(c.liveUser.user.id);
                               profile.stats = states;
 
                               _showMiniProfileDialog(profile);
                             }
                           },
-                          child:
-                          CachedCircleAvatar(imageUrl:  c.liveUser.user.profilePic,radius: 16,),
-
-
+                          child: CachedCircleAvatar(
+                            imageUrl: c.liveUser.user.profilePic,
+                            radius: 16,
+                          ),
                         ),
                         const SizedBox(width: 8),
 
@@ -419,7 +515,7 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "${c.liveUser.user.name}",
+                                c.liveUser.user.name,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
@@ -455,7 +551,7 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                   horizontal: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: (0.5 * 255).toDouble()),
                   border: Border.all(color: Colors.white70, width: 1.5),
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -510,7 +606,9 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
                     ),
                   ),
                   IconButton(
-                    onPressed: showGiftDialog,
+                    onPressed: (){
+                      showGiftDialog(widget.hostUserId);
+                    },
                     icon: Icon(
                       Icons.wallet_giftcard,
                       color: Colors.white,
@@ -567,11 +665,8 @@ class _AudiencePageState extends State<AudiencePage> with TickerProviderStateMix
               ),
             ),
           );
-
         },
       ),
     );
   }
-
-
 }

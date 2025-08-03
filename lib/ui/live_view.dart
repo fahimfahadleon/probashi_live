@@ -1,10 +1,13 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:probashi_live/models/live_session.dart';
 import 'package:probashi_live/ui/participant_video_widget.dart';
 import 'package:svgaplayer_flutter/player.dart';
 
+import '../models/friend_user_model.dart';
 import '../models/gift.dart';
 import '../models/user_profile.dart';
 import '../services/generic_system_service.dart';
@@ -41,15 +44,13 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   final List<LiveComment> comments = [];
   final List<LiveUser> participants = [];
   int viewerCount = 0;
-  late String profilePicture = "https://api.dicebear.com/7.x/identicon/png?seed=default";
+  late String profilePicture =
+      "https://api.dicebear.com/7.x/identicon/png?seed=default";
 
   SVGAAnimationController? _svgaController;
   bool _showGiftAnimation = false;
   String _giftSenderName = '';
   String _giftReceiverName = '';
-
-
-
 
   @override
   void initState() {
@@ -90,12 +91,12 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
       });
     });
     SocketService.instance.onParticipantJoined((participant) {
-      setState(() => participants.add(participant));
+      // setState(() => participants.add(participant));
     });
     SocketService.instance.onParticipantLeft((participant) {
-      setState(
-            () =>
-            participants.removeWhere((p) => p.user.id == participant.user.id),
+      setState(() {
+        participants.removeWhere((p) => p.user.id == participant.user.id);
+      }
       );
     });
 
@@ -129,7 +130,6 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
             ..addAll(updated);
         });
       }
-
       session = updatedSession;
     });
 
@@ -146,6 +146,88 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
         profilePicture = sessionData.hosts.first.user.profilePic;
       });
     });
+
+    SocketService.instance.onFriendListCalled((friendList) {
+      showFriendInviteDialog(context, friendList);
+    });
+
+    SocketService.instance.onInviteAccepted((data) {
+
+    });
+    SocketService.instance.onInviteCanceled((data) {
+      Utils.showToast(context, "Invite canceled");
+    });
+  }
+
+  void showFriendInviteDialog(BuildContext context,
+      List<FriendUserModel> friendList,) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          AlertDialog(
+            title: const Text('Invite a Friend'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: friendList.length,
+                separatorBuilder: (_, __) => const Divider(),
+                itemBuilder: (context, index) {
+                  final friend = friendList[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        // Profile picture
+                        CachedCircleAvatar(
+                            imageUrl: friend.profilePic, radius: 20),
+
+                        const SizedBox(width: 12),
+
+                        // Name (takes available space)
+                        Expanded(
+                          child: Text(
+                            friend.name,
+                            style: const TextStyle(fontSize: 16),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+
+                        // VIP + Invite icon group
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (friend.vipStatus)
+                              const Icon(Icons.star, color: Colors.amber,
+                                  size: 20),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.person_add_alt_1,
+                                color: Colors.blue,
+                              ),
+                              onPressed: () {
+                                SocketService.instance.inviteToJoinLive(
+                                  fromUserId: SocketService.instance.userId,
+                                  toUserId: friend.id,
+                                  sessionId: session.id,
+                                );
+                                Navigator.pop(context);
+                                Utils.showToast(
+                                  context,
+                                  "Invite sent to ${friend.name}",
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+    );
   }
 
   @override
@@ -180,6 +262,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     if (confirm == true) {
       final rtmpUrl = "${Variables.RTMP_URL}/${SocketService.instance.userId}";
       GenericStreamService.startStream(rtmpUrl);
+      GenericStreamService.switchCamera();
       SocketService.instance.goLive();
       setState(() => isStreaming = true);
     } else {
@@ -261,69 +344,120 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     setState(() => showControlsPanel = !showControlsPanel);
   }
 
-
   void _inviteParticipant() {
-    // TODO: Implement invite logic
+    SocketService.instance.getFriends();
+  }
+
+  void startPreview() async {
+    GenericStreamService.startPreview();
+    await Future.delayed(Duration(milliseconds: 200));
+    // Do something after 200ms
+  }
+
+  Widget buildAndroidPlatformView() {
+    return PlatformViewLink(
+      viewType: 'generic_stream_view',
+      surfaceFactory: (context, controller) {
+        return AndroidViewSurface(
+          controller: controller as AndroidViewController,
+          gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+          hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+        );
+      },
+      onCreatePlatformView: (params) {
+        return PlatformViewsService.initSurfaceAndroidView(
+          id: params.id,
+          viewType: 'generic_stream_view',
+          layoutDirection: TextDirection.ltr,
+          creationParams: {},
+          creationParamsCodec: const StandardMessageCodec(),
+        )
+          ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
+          ..create();
+      },
+    );
   }
 
   Widget _buildStreamGrid() {
     if (participants.isEmpty) {
-      return const AndroidView(
-        viewType: 'generic_stream_view',
-        layoutDirection: TextDirection.ltr,
-        creationParams: {},
-        creationParamsCodec: StandardMessageCodec(),
-      );
+      return buildAndroidPlatformView();
     }
 
-    final List<Widget> videoSlots = [
-      const AndroidView(
-        viewType: 'generic_stream_view',
-        layoutDirection: TextDirection.ltr,
-        creationParams: {},
-        creationParamsCodec: StandardMessageCodec(),
-      ),
-    ];
+    final String hostId = session.hosts.first.user.id;
 
-    videoSlots.addAll(
-      participants.map((p) {
-        final userId = p.user.id;
-        return Stack(
-          children: [
-            AspectRatio(
-              aspectRatio: 9 / 16,
-              child: ParticipantVideoWidget(
-                streamUrl: "${Variables.RTMP_URL}/$userId",
+    // Host AndroidView (left side)
+    final hostView = Expanded(
+      child: AspectRatio(
+        aspectRatio: 9 / 16,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16.0),
+          child: buildAndroidPlatformView(),
+        ),
+      ),
+    );
+
+    // First non-host participant (right side)
+    final firstParticipant = participants.firstWhere(
+          (p) => p.user.id != hostId,
+    );
+
+    final participantVLCView = firstParticipant != null
+        ? Expanded(
+      child: AspectRatio(
+        aspectRatio: 9 / 16,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16.0),
+          child: ParticipantVideoWidget(
+            streamUrl: "${Variables.RTMP_URL}/${firstParticipant.user.id}",
+          ),
+        ),
+      ),
+    )
+        : const Expanded(child: SizedBox.shrink());
+
+    final topRow = Row(children: [hostView, participantVLCView]);
+
+    // Remaining participants after first
+    final remainingParticipants = participants
+        .where((p) => p.user.id != hostId && p != firstParticipant)
+        .take(4)
+        .toList();
+
+    // Guest row with up to 4 VLC participants, and empty slots if needed
+    final guestRow = Row(
+      children: List.generate(4, (index) {
+        if (index < remainingParticipants.length) {
+          final userId = remainingParticipants[index].user.id;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: AspectRatio(
+                aspectRatio: 9 / 16,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16.0),
+                  child: ParticipantVideoWidget(
+                      streamUrl: "${Variables.RTMP_URL}/$userId",
+                  )
+                ),
               ),
             ),
-            Positioned(
-              top: 4,
-              right: 4,
-              child: Column(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.volume_off, color: Colors.white),
-                    onPressed: () => _muteUser(userId),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle, color: Colors.red),
-                    onPressed: () => _kickUser(userId),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
+          );
+        } else {
+          // Invisible slot (no placeholder)
+          return const Expanded(child: SizedBox.shrink());
+        }
       }),
     );
 
-    return GridView.count(
-      crossAxisCount: videoSlots.length <= 2 ? 2 : 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: videoSlots,
+    return Column(
+      children: [
+        topRow,
+        const SizedBox(height: 8),
+        remainingParticipants.isNotEmpty ? guestRow : const SizedBox.shrink(),
+      ],
     );
   }
+
 
   @override
   void dispose() {
@@ -346,365 +480,405 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: Colors.black,
       resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          Positioned.fill(child: _buildStreamGrid()),
-
-
-          if (_showGiftAnimation)
+      body: SafeArea(
+        child: Stack(
+          children: [
             Positioned.fill(
-              child: IgnorePointer(
-                ignoring: true,
-                child: Center(
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // SVGA Animation
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width,
-                        height: MediaQuery.of(context).size.height,
-                        child: SVGAImage(_svgaController!),
-                      ),
+                child: Align(
+                    alignment: const Alignment(0, -1),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 100),
+                      child: _buildStreamGrid(),
+                    )
+                )
+            ),
 
-                      // Floating Text at 20% screen height
-                      Positioned(
-                        top: MediaQuery.of(context).size.height * 0.1,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black45,
-                                  blurRadius: 10,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: RichText(
-                              textAlign: TextAlign.center,
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: _giftSenderName,
-                                    style: const TextStyle(
-                                      color: Colors.orangeAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                  ),
-                                  const TextSpan(
-                                    text: ' sent a gift to ',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: _giftReceiverName,
-                                    style: const TextStyle(
-                                      color: Colors.lightBlueAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
+            if (_showGiftAnimation)
+              Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: true,
+                  child: Center(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // SVGA Animation
+                        SizedBox(
+                          width: MediaQuery
+                              .of(context)
+                              .size
+                              .width,
+                          height: MediaQuery
+                              .of(context)
+                              .size
+                              .height,
+                          child: SVGAImage(_svgaController!),
+                        ),
+
+                        // Floating Text at 20% screen height
+                        Positioned(
+                          top: MediaQuery
+                              .of(context)
+                              .size
+                              .height * 0.1,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black45,
+                                    blurRadius: 10,
+                                    offset: Offset(0, 4),
                                   ),
                                 ],
                               ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          if (isStreaming) ...[
-            Positioned(
-              top: 40,
-              left: 16,
-              right: 16,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: () async {
-                      final tappedUserId = session.hosts.first.userId;
-
-                      // Prevent showing own profile
-                      if (tappedUserId == SocketService.instance.userId) return;
-
-                      try {
-                        // Load stats and profile
-                        UserStats stats = await ApiService.getApiClient().getUserStats(tappedUserId);
-                        UserProfile profile = await ApiService.getApiClient().getUserProfile(tappedUserId);
-                        profile.stats = stats;
-
-                        _showMiniProfileDialog(profile);
-                      } catch (e) {
-                        print("Error loading profile: $e");
-                      }
-                    },
-                    child: CachedCircleAvatar(imageUrl: profilePicture, radius: 20,),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          liveName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.remove_red_eye, size: 14, color: Colors.white70),
-                            const SizedBox(width: 4),
-                            Text(
-                              "$viewerCount viewers",
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
+                              child: RichText(
+                                textAlign: TextAlign.center,
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: _giftSenderName,
+                                      style: const TextStyle(
+                                        color: Colors.orangeAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                    const TextSpan(
+                                      text: ' sent a gift to ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: _giftReceiverName,
+                                      style: const TextStyle(
+                                        color: Colors.lightBlueAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: _onClosePressed,
-                  ),
-                ],
+                ),
               ),
-            ),
-            if (showCommentList)
+
+            if (isStreaming) ...[
               Positioned(
-                left: 0,
-                bottom: keyboardHeight + 60,
-                height: MediaQuery
-                    .of(context)
-                    .size
-                    .height * 0.4,
-                width: MediaQuery
-                    .of(context)
-                    .size
-                    .width * 0.8,
-                child: ListView.builder(
-                  reverse: true,
-                  itemCount: comments.length,
-                  itemBuilder: (context, index) {
-                    final c = comments[comments.length - 1 - index];
-                    final userName = c.liveUser.user.name;
-                    final message = c.message;
-                    final userId = c.liveUser.id;
+                top: 40,
+                left: 16,
+                right: 16,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final tappedUserId = session.hosts.first.userId;
 
-                    return Container(
-                      margin: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 8,
+                        // Prevent showing own profile
+                        if (tappedUserId == SocketService.instance.userId)
+                          return;
+
+                        try {
+                          // Load stats and profile
+                          UserStats stats = await ApiService.getApiClient()
+                              .getUserStats(tappedUserId);
+                          UserProfile profile = await ApiService.getApiClient()
+                              .getUserProfile(tappedUserId);
+                          profile.stats = stats;
+
+                          _showMiniProfileDialog(profile);
+                        } catch (e) {
+                          print("Error loading profile: $e");
+                        }
+                      },
+                      child: CachedCircleAvatar(
+                        imageUrl: profilePicture,
+                        radius: 20,
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5), // customize later
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        // Align top of texts with avatar
                         children: [
-                          GestureDetector(
-                            onTap: () async {
-
-                              if (c.liveUser.user.id == SocketService.instance.userId) return;
-
-                              UserStats state = await ApiService.getApiClient().getUserStats(c.liveUser.user.id);
-                              c.liveUser.user.stats = state;
-
-                              UserProfile profile = await ApiService.getApiClient().getUserProfile(c.liveUser.user.id);
-                              UserStats states = await ApiService.getApiClient().getUserStats(c.liveUser.user.id);
-                              profile.stats = states;
-
-                              _showMiniProfileDialog(profile);
-                            },
-                            child:
-
-                            CachedCircleAvatar(imageUrl: c.liveUser.user.profilePic,radius: 16,),
-
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  userName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow
-                                      .ellipsis, // Truncate if too long
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  message,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ],
+                          Text(
+                            liveName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
                           ),
+                          const SizedBox(height: 4),
                           Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.volume_off,
-                                  color: Colors.white,
-                                ),
-                                onPressed: () => _muteUser(userId),
+                              const Icon(
+                                Icons.remove_red_eye,
+                                size: 14,
+                                color: Colors.white70,
                               ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.remove_circle,
-                                  color: Colors.red,
+                              const SizedBox(width: 4),
+                              Text(
+                                "$viewerCount viewers",
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
                                 ),
-                                onPressed: () => _kickUser(userId),
                               ),
                             ],
                           ),
                         ],
                       ),
-                    );
-                  },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: _onClosePressed,
+                    ),
+                  ],
                 ),
               ),
+              if (showCommentList)
+                Positioned(
+                  left: 0,
+                  bottom: keyboardHeight + 60,
+                  height: MediaQuery
+                      .of(context)
+                      .size
+                      .height * 0.4,
+                  width: MediaQuery
+                      .of(context)
+                      .size
+                      .width * 0.8,
+                  child: ListView.builder(
+                    reverse: true,
+                    itemCount: comments.length,
+                    itemBuilder: (context, index) {
+                      final c = comments[comments.length - 1 - index];
+                      final userName = c.liveUser.user.name;
+                      final message = c.message;
+                      final userId = c.liveUser.id;
 
-            if (showControlsPanel)
+                      return Container(
+                        margin: const EdgeInsets.symmetric(
+                          vertical: 4,
+                          horizontal: 8,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
+                          // customize later
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          // Align top of texts with avatar
+                          children: [
+                            GestureDetector(
+                              onTap: () async {
+                                if (c.liveUser.user.id ==
+                                    SocketService.instance.userId) {
+                                  return;
+                                }
+
+                                UserStats state = await ApiService
+                                    .getApiClient()
+                                    .getUserStats(c.liveUser.user.id);
+                                c.liveUser.user.stats = state;
+
+                                UserProfile profile =
+                                await ApiService.getApiClient()
+                                    .getUserProfile(c.liveUser.user.id);
+                                UserStats states = await ApiService
+                                    .getApiClient()
+                                    .getUserStats(c.liveUser.user.id);
+                                profile.stats = states;
+
+                                _showMiniProfileDialog(profile);
+                              },
+                              child: CachedCircleAvatar(
+                                imageUrl: c.liveUser.user.profilePic,
+                                radius: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    userName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow
+                                        .ellipsis, // Truncate if too long
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    message,
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.volume_off,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: () => _muteUser(userId),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.remove_circle,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () => _kickUser(userId),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+              if (showControlsPanel)
+                Positioned(
+                  bottom: keyboardHeight + 60,
+                  right: 0,
+                  width: MediaQuery
+                      .of(context)
+                      .size
+                      .width * 0.2,
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
+                      border: Border.all(color: Colors.white70, width: 1.5),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: _switchCamera,
+                          icon: const Icon(
+                            Icons.cameraswitch,
+                            color: Colors.white,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _toggleCamera,
+                          icon: Icon(
+                            isCameraOn ? Icons.videocam : Icons.videocam_off,
+                            color: Colors.white,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _toggleMic,
+                          icon: Icon(
+                            isMicOn ? Icons.mic : Icons.mic_off,
+                            color: Colors.white,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: participants.length < 5
+                              ? _inviteParticipant
+                              : null,
+                          icon: const Icon(Icons.group_add, color: Colors
+                              .white),
+                          tooltip: "Add People",
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Positioned(
-                bottom: keyboardHeight + 60,
+                left: 0,
                 right: 0,
-                width: MediaQuery
-                    .of(context)
-                    .size
-                    .width * 0.2,
+                bottom: keyboardHeight,
                 child: Container(
-                  margin: const EdgeInsets.only(right: 8),
+                  color: Colors.black45,
                   padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    border: Border.all(color: Colors.white70, width: 1.5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                      horizontal: 8, vertical: 4),
+                  child: Row(
                     children: [
-                      IconButton(
-                        onPressed: _switchCamera,
-                        icon: const Icon(
-                          Icons.cameraswitch,
-                          color: Colors.white,
+                      Expanded(
+                        child: TextField(
+                          controller: _chatController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: const InputDecoration(
+                            hintText: "Type a comment...",
+                            hintStyle: TextStyle(color: Colors.grey),
+                            border: InputBorder.none,
+                          ),
+                          onSubmitted: (_) => _sendComment(),
                         ),
                       ),
                       IconButton(
-                        onPressed: _toggleCamera,
+                        onPressed: _sendComment,
+                        icon: const Icon(Icons.send, color: Colors.white),
+                      ),
+                      IconButton(
+                        onPressed: () {
+                          setState(() => showCommentList = !showCommentList);
+                        },
                         icon: Icon(
-                          isCameraOn ? Icons.videocam : Icons.videocam_off,
+                          showCommentList
+                              ? Icons.chat
+                              : Icons.chat_bubble_outline,
                           color: Colors.white,
                         ),
                       ),
+
                       IconButton(
-                        onPressed: _toggleMic,
+                        onPressed: _toggleControlsPanel,
                         icon: Icon(
-                          isMicOn ? Icons.mic : Icons.mic_off,
+                          showControlsPanel
+                              ? Icons.keyboard_arrow_down
+                              : Icons.keyboard_arrow_up,
                           color: Colors.white,
+                          size: 30,
                         ),
-                      ),
-                      IconButton(
-                        onPressed: participants.length < 5
-                            ? _inviteParticipant
-                            : null,
-                        icon: const Icon(Icons.group_add, color: Colors.white),
-                        tooltip: "Add People",
                       ),
                     ],
                   ),
                 ),
               ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: keyboardHeight,
-              child: Container(
-                color: Colors.black45,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _chatController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          hintText: "Type a comment...",
-                          hintStyle: TextStyle(color: Colors.grey),
-                          border: InputBorder.none,
-                        ),
-                        onSubmitted: (_) => _sendComment(),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _sendComment,
-                      icon: const Icon(Icons.send, color: Colors.white),
-                    ),
-                    IconButton(
-                      onPressed: () {
-                        setState(() => showCommentList = !showCommentList);
-                      },
-                      icon: Icon(
-                        showCommentList
-                            ? Icons.chat
-                            : Icons.chat_bubble_outline,
-                        color: Colors.white,
-                      ),
-                    ),
-
-
-
-                    IconButton(
-                      onPressed: _toggleControlsPanel,
-                      icon: Icon(
-                        showControlsPanel
-                            ? Icons.keyboard_arrow_down
-                            : Icons.keyboard_arrow_up,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -717,9 +891,8 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
             userProfile: userProfile,
             onRelationToggle: () async {
               try {
-                final newRelation = await Utils.toggleFollowStatus(
-                    userProfile);
-               return newRelation;
+                final newRelation = await Utils.toggleFollowStatus(userProfile);
+                return newRelation;
               } catch (e) {
                 print(e);
                 return UserRelation(isFollowing: false, isFriend: false);
@@ -730,13 +903,13 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ChatPage(
-                    currentUserId: SocketService.instance.userId,
-                    otherUserId: userProfile.id,
-                  ),
+                  builder: (_) =>
+                      ChatPage(
+                        currentUserId: SocketService.instance.userId,
+                        otherUserId: userProfile.id,
+                      ),
                 ),
               );
-
             },
           ),
     );

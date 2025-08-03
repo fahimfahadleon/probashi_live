@@ -1,3 +1,6 @@
+
+
+
 import 'package:probashi_live/utils/utils.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:probashi_live/utils/variables.dart';
@@ -5,7 +8,7 @@ import 'package:probashi_live/utils/variables.dart';
 import '../models/chat_history_response.dart';
 import '../models/chat_inbox_entry.dart';
 import '../models/chat_message.dart';
-import '../models/gift.dart';
+import '../models/friend_user_model.dart';
 import '../models/live_comment.dart';
 import '../models/live_gift.dart';
 import '../models/live_session.dart';
@@ -44,14 +47,11 @@ class SocketService {
 
   /// Initialize and connect socket with JWT token for auth
   void connect(String jwtToken) {
-    socket = IO.io(
-      Variables.BASE_URL,
-      <String, dynamic>{
-        'transports': ['websocket'],
-        'autoConnect': false,
-        'auth': {'token': jwtToken},
-      },
-    );
+    socket = IO.io(Variables.BASE_URL, <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
+      'auth': {'token': jwtToken},
+    });
 
     socket.connect();
 
@@ -75,6 +75,15 @@ class SocketService {
     }
     final rtmpUrl = "${Variables.RTMP_URL}/$userId";
     socket.emit(GO_LIVE, {USER_ID: userId, RTMP_URL: rtmpUrl});
+  }
+
+  void participantLive(String sessionId){
+    final data = {
+      'userId': userId,
+      'sessionId': sessionId,
+      'rtmpUrl': '${Variables.RTMP_URL}/$userId',
+    };
+    socket.emit('participant_go_live', data);
   }
 
   /// Leave the current live session
@@ -139,6 +148,9 @@ class SocketService {
     }
     socket.emit(GET_ACTIVE_LIVE_SESSIONS);
   }
+  void requestLiveSessionDetails(String sessionId){
+    socket.emit("get_live_session_details", {'sessionId': sessionId});
+  }
 
   void sendMessage({
     required String senderId,
@@ -166,7 +178,6 @@ class SocketService {
     });
   }
 
-
   void sendGift(LiveGift gift) {
     if (!isConnected || currentSessionId == null || userId.isEmpty) {
       print("Cannot send gift: Missing session or user info");
@@ -176,13 +187,54 @@ class SocketService {
     print("Gift sent: ${gift.toJson().toString()}");
   }
 
-
   void getChatInbox() {
     socket.emit('get_chat_inbox', {'userId': userId});
   }
 
   void off(String eventName) {
     socket.off(eventName);
+  }
+
+  void inviteToJoinLive({
+    required String fromUserId,
+    required String toUserId,
+    required String sessionId,
+  }) {
+    socket.emit('invite_to_join_live', {
+      'fromUserId': fromUserId,
+      'toUserId': toUserId,
+      'sessionId': sessionId,
+    });
+  }
+
+  void acceptInvite({required String fromUserId, required String userId, required String sessionId}) {
+    socket.emit('invite_accepted', {'fromUserId':fromUserId,'userId': userId, 'sessionId': sessionId});
+  }
+
+  void cancelInvite({
+    required String fromUserId,
+    required String toUserId,
+    required String sessionId,
+  }) {
+    socket.emit('invite_canceled', {
+      'fromUserId': fromUserId,
+      'toUserId': toUserId,
+      'sessionId': sessionId,
+    });
+  }
+
+  void onChatInbox(void Function(List<ChatInboxEntry>) callback) {
+    socket.on('chat_inbox', (data) {
+      final List<ChatInboxEntry> inbox = (data as List)
+          .map((entry) => ChatInboxEntry.fromJson(entry))
+          .toList();
+
+      callback(inbox); // ✅ Call the callback with typed list
+    });
+  }
+
+  void getFriends() {
+    socket.emit('get_friends');
   }
 
   // ========================
@@ -218,6 +270,38 @@ class SocketService {
   void Function(ChatHistoryResponse response)? _chatHistoryCallback;
 
   void Function(List<LiveSession> sessions)? _activeLiveSessionsCallback;
+  void Function(Map<String, dynamic> inviteData)? _liveInviteCallback;
+
+  void Function(Map<String, dynamic>)? _inviteAcceptedCallback;
+  void Function(Map<String, dynamic>)? _inviteCanceledCallback;
+  void Function(List<FriendUserModel>)? _friendsListCallback;
+  void Function(LiveSession)? _participantLiveStartedCallback;
+  void Function(LiveSession)? _getLiveDetails;
+  void onLiveDetailData(void Function(LiveSession) callback) {
+    _getLiveDetails = callback;
+  }
+
+  void onParticipantLiveStarted(void Function(LiveSession) callback) {
+    _participantLiveStartedCallback = callback;
+  }
+
+  void onFriendListCalled(void Function(List<FriendUserModel>) callback) {
+    _friendsListCallback = callback;
+  }
+
+
+
+  void onInviteAccepted(void Function(Map<String, dynamic>) callback) {
+    _inviteAcceptedCallback = callback;
+  }
+
+  void onInviteCanceled(void Function(Map<String, dynamic>) callback) {
+    _inviteCanceledCallback = callback;
+  }
+
+  void onLiveInvite(void Function(Map<String, dynamic> inviteData) callback) {
+    _liveInviteCallback = callback;
+  }
 
   void onLiveStarted(void Function(LiveSession liveSession) callback) {
     _liveStartedCallback = callback;
@@ -256,7 +340,9 @@ class SocketService {
   }
 
   /// Callback when active live sessions are received
-  void onActiveLiveSessions(void Function(List<LiveSession> sessions) callback) {
+  void onActiveLiveSessions(
+    void Function(List<LiveSession> sessions) callback,
+  ) {
     _activeLiveSessionsCallback = callback;
   }
 
@@ -266,16 +352,6 @@ class SocketService {
 
   void onChatHistory(void Function(ChatHistoryResponse response) callback) {
     _chatHistoryCallback = callback;
-  }
-
-  void onChatInbox(void Function(List<ChatInboxEntry>) callback) {
-    socket.on('chat_inbox', (data) {
-      final List<ChatInboxEntry> inbox = (data as List)
-          .map((entry) => ChatInboxEntry.fromJson(entry))
-          .toList();
-
-      callback(inbox); // ✅ Call the callback with typed list
-    });
   }
 
 
@@ -289,12 +365,44 @@ class SocketService {
       print('Connected to socket with id: ${socket.id}');
       isConnected = true;
     });
+    
+    
+    socket.on("live_session_details", (data){
+      LiveSession liveSession = LiveSession.fromJson(data);
+      _getLiveDetails?.call(liveSession);
+    });
 
     socket.on('connected', (data) {
       print('Server says: ${data['message']}');
       if (data['userId'] != null) {
         userId = data['userId'];
       }
+    });
+
+    socket.on('participant_live_started', (data){
+      LiveSession liveSession = LiveSession.fromJson(data);
+      currentSessionId = liveSession.id;
+      _participantLiveStartedCallback?.call(liveSession);
+    });
+
+    socket.on('friends_list', (data) {
+      List<FriendUserModel> friendList = (data as List)
+          .map((json) => FriendUserModel.fromJson(json))
+          .toList();
+      _friendsListCallback?.call(friendList);
+    });
+    socket.on('invite_accepted', (data) {
+      print('Invite accepted: $data');
+      _inviteAcceptedCallback?.call(data);
+    });
+
+    socket.on('invite_canceled', (data) {
+      print('Invite canceled: $data');
+      _inviteCanceledCallback?.call(data);
+    });
+
+    socket.on('live_invite', (data) {
+      _liveInviteCallback?.call(data); // Call the registered Flutter callback
     });
 
     socket.on('live_started', (liveSessionJson) {
@@ -305,9 +413,7 @@ class SocketService {
     });
 
     socket.on('live_ended', (dataJson) {
-      Utils.printGreenComment(dataJson.toString());
       final liveSession = LiveSession.fromJson(dataJson);
-      Utils.printGreenComment(liveSession.toJson().toString());
       if (liveSession.id == currentSessionId) {
         currentSessionId = null;
         _cachedLiveSession = null;
@@ -317,28 +423,26 @@ class SocketService {
 
     socket.on('session_updated', (dataJson) {
       final updatedSession = LiveSession.fromJson(dataJson);
-      print('Session updated: ${updatedSession.id}');
       cacheLiveSession(updatedSession); // ⬅️ Keep cache in sync
       _sessionUpdatedCallback?.call(updatedSession);
     });
 
-
-     socket.on('new_comment', (commentJson) {
-       print(commentJson);
+    socket.on('new_comment', (commentJson) {
       final comment = LiveComment.fromJson(commentJson);
-      print('New comment: ${comment.message}');
       _newCommentCallback?.call(comment);
     });
 
     socket.on('participant_joined', (participantJson) {
+      print("participant joined: $participantJson");
       final participant = LiveUser.fromJson(participantJson);
-      print('Participant joined: ${participant.user.name}');
       _participantJoinedCallback?.call(participant);
     });
 
     socket.on('participant_left', (participantJson) {
-      final participant = LiveUser.fromJson(participantJson);
-      print('Participant left: ${participant.user.name}');
+
+      print("participant left: $participantJson");
+
+      final participant = LiveUser.fromJson(participantJson['liveUser']);
       _participantLeftCallback?.call(participant);
     });
 
@@ -354,7 +458,7 @@ class SocketService {
     });
 
     socket.on('gift_received', (giftJson) {
-      Utils.printGreenComment(giftJson.toString());
+      print("gift received: $giftJson");
       _giftReceivedCallback?.call(giftJson);
     });
 
@@ -384,10 +488,9 @@ class SocketService {
       final code = data['code'];
       final message = data['message'];
 
-      print(message);
+      print("error: "+message);
       // Show specific UI or messages based on code
     });
-
 
     socket.on('new_message', (data) {
       final message = ChatMessage.fromJson(data);
@@ -398,7 +501,6 @@ class SocketService {
       final history = ChatHistoryResponse.fromJson(data);
       _chatHistoryCallback?.call(history);
     });
-
   }
 
   void cacheLiveSession(LiveSession session) {
@@ -406,6 +508,11 @@ class SocketService {
     currentSessionId = session.id;
   }
 
-
-
+  void participantLeft() {
+    if (userId.isEmpty || currentSessionId == null) {
+      print("Cannot leave live: userId or sessionId missing");
+      return;
+    }
+    socket.emit('participant_left', {USER_ID: userId, 'sessionId': currentSessionId});
+  }
 }

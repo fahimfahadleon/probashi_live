@@ -24,6 +24,26 @@ class GenericStreamService {
       return false;
     }
   }
+  /// Stop the current RTMP stream
+  static Future<bool> startPreview() async {
+    try {
+      final result = await _channel.invokeMethod<String>('startPreview');
+      return result == 'stopped';
+    } on PlatformException catch (e) {
+      print('Error stopping stream: ${e.message}');
+      return false;
+    }
+  }
+  /// Stop the current RTMP stream
+  static Future<bool> stopPreview() async {
+    try {
+      final result = await _channel.invokeMethod<String>('stopPreview');
+      return result == 'stopped';
+    } on PlatformException catch (e) {
+      print('Error stopping stream: ${e.message}');
+      return false;
+    }
+  }
 
   /// Switch between front and back cameras
   static Future<void> switchCamera() async {

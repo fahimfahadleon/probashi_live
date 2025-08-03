@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:svgaplayer_flutter/parser.dart';
 import 'package:svgaplayer_flutter/proto/svga.pb.dart';
 
+import '../models/live_user.dart';
 import '../models/user_profile.dart';
 import 'api_service.dart';
 
@@ -82,6 +83,21 @@ class Utils{
     final bytes = await file.readAsBytes();
     final videoItem = await SVGAParser.shared.decodeFromBuffer(bytes);
     return videoItem;
+  }
+
+
+  static List<LiveUser> addLiveUsersWithoutDuplicates(
+      List<LiveUser> list, List<LiveUser> newItems) {
+    final existingIds = list.map((e) => e.id).toSet();
+
+    for (final item in newItems) {
+      if (!existingIds.contains(item.id)) {
+        list.add(item);
+        existingIds.add(item.id);
+      }
+    }
+
+    return list;
   }
 
 }

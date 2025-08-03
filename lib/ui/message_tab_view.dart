@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:probashi_live/models/chat_inbox_entry.dart';
-import '../models/chat_inbox_user.dart';
 import '../utils/socket_service.dart';
 import 'cached_circle_avatar.dart';
 import 'one_to_one_chat.dart';

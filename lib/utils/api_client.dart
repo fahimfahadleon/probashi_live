@@ -1,6 +1,6 @@
 
 import 'package:dio/dio.dart';
-import 'package:retrofit/error_logger.dart';
+import 'package:probashi_live/models/collections_category.dart';
 import 'package:retrofit/http.dart';
 import 'dart:async';
 import '../models/announcement_model.dart';
@@ -8,6 +8,7 @@ import '../models/create_payment_dto.dart';
 import '../models/gift_category.dart';
 import '../models/login_response.dart';
 import '../models/offer.dart';
+import '../models/parchase_collection.dart';
 import '../models/user_profile.dart';
 import '../models/vip_diamond_pack.dart';
 
@@ -58,5 +59,12 @@ abstract class ApiClient {
 
   @GET("/gifts/by-category")
   Future<List<Category>> getAllCategoriesWithGifts();
+
+  @GET("/collections/by-category")
+  Future<List<CollectionsCategory>> getAllCategoriesWithCollections();
+
+  @POST("/collections/purchase")
+  Future<void> purchaseCollection(
+      @Body() PurchaseCollectionRequest body,);
 
 }

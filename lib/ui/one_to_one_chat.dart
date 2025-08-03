@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:probashi_live/models/user_profile.dart';
 import 'package:probashi_live/utils/api_service.dart';
-import 'package:probashi_live/utils/utils.dart';
 import '../models/chat_history_response.dart';
 import '../models/chat_message.dart';
 import '../utils/socket_service.dart';

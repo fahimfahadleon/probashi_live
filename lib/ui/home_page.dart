@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:probashi_live/ui/audience_page.dart';
 import 'package:probashi_live/ui/live_view.dart';
+import 'package:probashi_live/ui/participant_page.dart';
 import 'package:probashi_live/ui/profile_tab_view.dart';
 import 'package:probashi_live/ui/shorts_tab_view.dart';
 import 'package:probashi_live/ui/video_tab_view.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../utils/socket_service.dart';
 import 'home_tab_view.dart';
 import 'message_tab_view.dart';
@@ -35,6 +36,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _initSocket();
+    WakelockPlus.enable();
   }
 
   Future<void> _initSocket() async {
@@ -56,6 +58,45 @@ class _HomePageState extends State<HomePage> {
             _hasNewMessage = true;
           });
         }
+      });
+
+      SocketService.instance.onLiveInvite((inviteData) {
+
+
+        print('Live invite received: $inviteData');
+        final from = inviteData['fromUserId'];
+        final sessionId = inviteData['sessionId'];
+        final to = inviteData['toUserId'];
+        final message = inviteData['message'];
+
+        // Show popup or navigate to invite screen
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text("Live Invite"),
+            content: Text("User $from invited you to join live session."),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  socketService.acceptInvite(fromUserId: from, userId: to, sessionId: sessionId);
+                  Navigator.of(context).pop();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ParticipantPage(sessionId: sessionId)),
+                  );
+                },
+                child: Text("Join"),
+              ),
+              TextButton(
+                onPressed: (){
+                  socketService.cancelInvite(fromUserId: from, toUserId: to, sessionId: sessionId);
+                  Navigator.of(context).pop();
+                },
+                child: Text("Decline"),
+              ),
+            ],
+          ),
+        );
       });
 
 

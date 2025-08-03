@@ -2,7 +2,6 @@ package com.horoftech.probashi_live;
 
 import android.app.Activity;
 import android.content.Context;
-import android.media.MediaRecorder;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -11,10 +10,7 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 import com.pedro.encoder.input.sources.audio.AudioSource;
 import android.util.DisplayMetrics;
-import android.view.WindowManager;
-
 import com.pedro.encoder.input.sources.video.Camera2Source;
-import com.pedro.extrasources.CameraXSource;
 import com.pedro.encoder.input.sources.video.Camera1Source;
 import com.pedro.encoder.input.sources.video.VideoSource;
 
@@ -24,6 +20,8 @@ import com.pedro.encoder.input.sources.audio.MicrophoneSource;
 import com.pedro.common.ConnectChecker;
 import com.pedro.library.generic.GenericStream;
 import com.pedro.library.util.BitrateAdapter;
+
+
 import io.flutter.plugin.platform.PlatformView;
 
 public class GenericStreamView extends FrameLayout implements PlatformView, ConnectChecker {
@@ -31,7 +29,7 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
     private final SurfaceView surfaceView;
     private final GenericStream genericStream;
     private final BitrateAdapter bitrateAdapter;
-    final int bitrate = 6000*1000;
+    final int bitrate = 2200*1000;
 
 
     Context context;
@@ -54,17 +52,14 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
         surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
-                if (!genericStream.isOnPreview()) {
-                    genericStream.startPreview(surfaceView);
+                if (genericStream.isOnPreview()) {
+                    genericStream.stopPreview();
                 }
+                genericStream.startPreview(surfaceView);
             }
 
             @Override
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-
-               Log.e("width",String.valueOf(width));
-               Log.e("height",String.valueOf(height));
-
                 genericStream.getGlInterface().setPreviewResolution(width, height);
             }
 
@@ -96,9 +91,12 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
             Log.e("error","could not prepare video or audio");
             return;
         }
-
-
-
+    }
+    public void startPreview(){
+        genericStream.startPreview(surfaceView);
+    }
+   public void stopPreview(){
+       genericStream.stopPreview();
     }
 
     public void startStream(String url) {
@@ -112,15 +110,17 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
 
     public void switchCamera() {
         VideoSource videoSource = genericStream.getVideoSource();
-        if (videoSource instanceof Camera2Source) {
-            ((Camera2Source) videoSource).switchCamera();
+        if (videoSource instanceof Camera2Source ) {
+            Camera2Source camera2Source = (Camera2Source)videoSource;
+            camera2Source.switchCamera();
         }
         else if (videoSource instanceof Camera1Source) {
             ((Camera1Source) videoSource).switchCamera();
-        } else  if (videoSource instanceof CameraXSource) {
-            ((CameraXSource) videoSource).switchCamera();
         }
-        Toast.makeText(context, "switch camera called", Toast.LENGTH_SHORT).show();
+//        else  if (videoSource instanceof CameraXSource) {
+//            ((CameraXSource) videoSource).switchCamera();
+//        }
+        
     }
 
     public void release() {

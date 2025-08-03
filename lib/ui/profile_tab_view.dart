@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:probashi_live/ui/top_up_view.dart';
+import 'package:probashi_live/ui/vip_controllers.dart';
 import 'package:probashi_live/utils/api_service.dart';
-import 'package:probashi_live/utils/socket_service.dart';
 
 import '../models/offer.dart';
 import '../models/user_profile.dart';
@@ -37,12 +37,12 @@ class _MyPageState extends State<ProfileTabView> {
 
   Future<void> _initData() async {
     final profile = await _loadProfile(); // sets Variables.currentUser
-    await fetchUserStats(profile.id);     // now you are safe
+    await fetchUserStats(profile.id); // now you are safe
     fetchOffers();
   }
 
   Future<UserProfile> _loadProfile() async {
-    UserProfile profile =  await ApiService.getApiClient().getMyProfile();
+    UserProfile profile = await ApiService.getApiClient().getMyProfile();
     Variables.currentUser = profile;
     return profile;
   }
@@ -86,8 +86,6 @@ class _MyPageState extends State<ProfileTabView> {
     super.dispose();
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,7 +127,6 @@ class _MyPageState extends State<ProfileTabView> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-
               // Profile Avatar + Info
               Padding(
                 padding: const EdgeInsets.only(top: 20.0),
@@ -150,15 +147,19 @@ class _MyPageState extends State<ProfileTabView> {
                                 color: Colors.grey.shade300,
                                 alignment: Alignment.center,
                                 child: const CircularProgressIndicator(
-                                    strokeWidth: 2),
+                                  strokeWidth: 2,
+                                ),
                               );
                             },
                             errorBuilder: (context, error, stackTrace) {
                               return Container(
                                 color: Colors.grey,
                                 alignment: Alignment.center,
-                                child: const Icon(Icons.person, size: 40,
-                                    color: Colors.white),
+                                child: const Icon(
+                                  Icons.person,
+                                  size: 40,
+                                  color: Colors.white,
+                                ),
                               );
                             },
                           ),
@@ -166,11 +167,18 @@ class _MyPageState extends State<ProfileTabView> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Text(userProfile.name, style: TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold)),
+                    Text(
+                      userProfile.name,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text("ID:${userProfile.id}",
-                        style: TextStyle(color: Colors.grey)),
+                    Text(
+                      "ID:${userProfile.id}",
+                      style: TextStyle(color: Colors.grey),
+                    ),
                     const SizedBox(height: 8),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -227,7 +235,10 @@ class _MyPageState extends State<ProfileTabView> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Icon(
-                        Icons.emoji_events, color: Colors.brown, size: 18),
+                      Icons.emoji_events,
+                      color: Colors.brown,
+                      size: 18,
+                    ),
                   ),
 
                   Container(
@@ -239,35 +250,48 @@ class _MyPageState extends State<ProfileTabView> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Icon(
-                        Icons.verified_user, color: Colors.green, size: 18),
+                      Icons.verified_user,
+                      color: Colors.green,
+                      size: 18,
+                    ),
                   ),
                 ],
               ),
 
-
               // Beans and Diamonds Row
               Card(
                 margin: const EdgeInsets.symmetric(
-                    horizontal: 30, vertical: 10),
+                  horizontal: 30,
+                  vertical: 10,
+                ),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                      vertical: 12.0, horizontal: 32),
+                    vertical: 12.0,
+                    horizontal: 32,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(children: [
-                        const Icon(Icons.local_fire_department, color: Colors
-                            .orange),
-                        const SizedBox(height: 4),
-                        Text(userProfile.vipStatus ? "VIP" : "Non VIP"),
-                      ]),
-                      Column(children: [
-                        Icon(Icons.favorite, color: Colors.red),
-                        SizedBox(height: 4),
-                        Text("${userProfile.diamond} Diamonds"),
-                      ]),
+                      Column(
+                        children: [
+                          const Icon(
+                            Icons.local_fire_department,
+                            color: Colors.orange,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(userProfile.vipStatus ? "VIP" : "Non VIP"),
+                        ],
+                      ),
+                      Column(
+                        children: [
+                          Icon(Icons.favorite, color: Colors.red),
+                          SizedBox(height: 4),
+                          Text("${userProfile.diamond} Diamonds"),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -277,21 +301,31 @@ class _MyPageState extends State<ProfileTabView> {
               Card(
                 margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _InfoColumn(title: "Friends", value: _status.friends
-                          .toString()
-                          .isEmpty ? "0" : _status.friends.toString()),
-                      _InfoColumn(title: "Followers", value: _status.followers
-                          .toString()
-                          .isEmpty ? "0" : _status.followers.toString()),
-                      _InfoColumn(title: "Following", value: _status.following
-                          .toString()
-                          .isEmpty ? "0" : _status.following.toString()),
+                      _InfoColumn(
+                        title: "Friends",
+                        value: _status.friends.toString().isEmpty
+                            ? "0"
+                            : _status.friends.toString(),
+                      ),
+                      _InfoColumn(
+                        title: "Followers",
+                        value: _status.followers.toString().isEmpty
+                            ? "0"
+                            : _status.followers.toString(),
+                      ),
+                      _InfoColumn(
+                        title: "Following",
+                        value: _status.following.toString().isEmpty
+                            ? "0"
+                            : _status.following.toString(),
+                      ),
                     ],
                   ),
                 ),
@@ -339,7 +373,8 @@ class _MyPageState extends State<ProfileTabView> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => OfferDetailsView(offer: _currentOffer!),
+                              builder: (context) =>
+                                  OfferDetailsView(offer: _currentOffer!),
                             ),
                           );
                         },
@@ -357,19 +392,33 @@ class _MyPageState extends State<ProfileTabView> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    _GridIcon(icon: Icons.monetization_on,
+                    _GridIcon(
+                      icon: Icons.monetization_on,
                       label: "Top-up",
-                      onTap: () =>
-                      {
+                      onTap: () => {
                         Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const TopUpView())
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const TopUpView(),
+                          ),
                         ),
                       },
                     ),
                     _GridIcon(icon: Icons.wallet, label: "Earnings"),
                     _GridIcon(icon: Icons.task, label: "My Tasks"),
-                    _GridIcon(icon: Icons.star, label: "VIP"),
+                    _GridIcon(icon: Icons.collections, label: "My Collections"),
+                    _GridIcon(
+                      icon: Icons.star,
+                      label: "VIP",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const VipControllers(),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -383,7 +432,6 @@ class _MyPageState extends State<ProfileTabView> {
   }
 }
 
-
 class _InfoColumn extends StatelessWidget {
   final String title;
   final String value;
@@ -395,24 +443,21 @@ class _InfoColumn extends StatelessWidget {
     return Column(
       children: [
         Text(
-            value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          value,
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         Text(title, style: TextStyle(color: Colors.grey)),
       ],
     );
   }
 }
 
-
 class _GridIcon extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
 
-  const _GridIcon({
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
+  const _GridIcon({required this.icon, required this.label, this.onTap});
 
   @override
   Widget build(BuildContext context) {

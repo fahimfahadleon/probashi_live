@@ -39,6 +39,14 @@ public class MainActivity extends FlutterFragmentActivity {
                     }
 
                     switch (call.method) {
+                        case "startPreview":
+                            genericStreamViewInstance.startPreview();
+                            result.success(null);
+                            break;
+                        case "stopPreview":
+                            genericStreamViewInstance.stopPreview();
+                            result.success(null);
+                            break;
                         case "startStream":
                             String url = call.argument("url");
                             genericStreamViewInstance.startStream(url);

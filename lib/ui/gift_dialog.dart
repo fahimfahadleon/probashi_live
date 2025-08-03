@@ -47,7 +47,7 @@ class _GiftDialogState extends State<GiftDialog> with TickerProviderStateMixin {
   Future<void> _showSVGAPreview(String url) async {
     final controller = SVGAAnimationController(vsync: this);
     try {
-      final videoItem = await SVGAParser.shared.decodeFromURL(Variables.BASE_URL + url);
+      MovieEntity videoItem = await SVGAParser.shared.decodeFromURL(Variables.BASE_URL + url);
       controller.videoItem = videoItem;
       controller.repeat();
 

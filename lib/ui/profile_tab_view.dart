@@ -8,6 +8,7 @@ import 'package:probashi_live/utils/api_service.dart';
 import '../models/offer.dart';
 import '../models/user_profile.dart';
 import '../utils/variables.dart';
+import 'my_collections.dart';
 import 'offer_details_view.dart';
 
 class ProfileTabView extends StatefulWidget {
@@ -24,6 +25,7 @@ class _MyPageState extends State<ProfileTabView> {
   int _currentOfferIndex = 0;
   Offer? _currentOffer;
   Timer? _offerTimer;
+  bool _hasLoaded = false;
 
   @override
   void initState() {
@@ -35,10 +37,24 @@ class _MyPageState extends State<ProfileTabView> {
     });
   }
 
-  Future<void> _initData() async {
-    final profile = await _loadProfile(); // sets Variables.currentUser
-    await fetchUserStats(profile.id); // now you are safe
-    fetchOffers();
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Refresh profile each time this tab becomes visible again
+    if (!_hasLoaded) {
+      _hasLoaded = true; // prevent double call on initial mount
+    } else {
+      _futureProfile = _initData(); // refresh user data
+      setState(() {}); // triggers rebuild
+    }
+  }
+
+  Future<UserProfile> _initData() async {
+    final profile = await _loadProfile();
+    await fetchUserStats(profile.id); // updates stats
+    fetchOffers(); // fetch latest offers
+    return profile;
   }
 
   Future<UserProfile> _loadProfile() async {
@@ -89,24 +105,32 @@ class _MyPageState extends State<ProfileTabView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: FutureBuilder<UserProfile>(
-        future: _futureProfile,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            print(snapshot.error);
-            return Center(child: Text("Error: ${snapshot.error}"));
-          }
-          if (!snapshot.hasData) {
-            return const Center(child: Text("No profile found"));
-          }
-
-          final userProfile = snapshot.data!;
-
-          return _buildProfileBody(userProfile); // keep body clean and separate
+      body: RefreshIndicator(
+        onRefresh: () async {
+          _futureProfile = _initData();
+          setState(() {});
         },
+        child: FutureBuilder<UserProfile>(
+          future: _futureProfile,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              print(snapshot.error);
+              return Center(child: Text("Error: ${snapshot.error}"));
+            }
+            if (!snapshot.hasData) {
+              return const Center(child: Text("No profile found"));
+            }
+
+            final userProfile = snapshot.data!;
+
+            return _buildProfileBody(
+              userProfile,
+            ); // keep body clean and separate
+          },
+        ),
       ),
     );
   }
@@ -406,7 +430,18 @@ class _MyPageState extends State<ProfileTabView> {
                     ),
                     _GridIcon(icon: Icons.wallet, label: "Earnings"),
                     _GridIcon(icon: Icons.task, label: "My Tasks"),
-                    _GridIcon(icon: Icons.collections, label: "My Collections"),
+                    _GridIcon(
+                      icon: Icons.collections,
+                      label: "My Collections",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const MyCollections(),
+                          ),
+                        );
+                      },
+                    ),
                     _GridIcon(
                       icon: Icons.star,
                       label: "VIP",

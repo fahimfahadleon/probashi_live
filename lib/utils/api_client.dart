@@ -1,5 +1,6 @@
 
 import 'package:dio/dio.dart';
+import 'package:probashi_live/models/collection_name_request.dart';
 import 'package:probashi_live/models/collections_category.dart';
 import 'package:retrofit/http.dart';
 import 'dart:async';
@@ -64,7 +65,18 @@ abstract class ApiClient {
   Future<List<CollectionsCategory>> getAllCategoriesWithCollections();
 
   @POST("/collections/purchase")
-  Future<void> purchaseCollection(
+  Future<UserProfile> purchaseCollection(
       @Body() PurchaseCollectionRequest body,);
+
+  @POST('/collections/by-name')
+  Future<String> getCollectionSvgaByName(@Body() CollectionNameRequest request);
+
+
+  @PATCH('/profile/settings')
+  Future<UserProfile> updateUserSettings({
+    @Body() required Map<String, dynamic> settings,
+  });
+
+
 
 }

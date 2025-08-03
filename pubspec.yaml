@@ -48,6 +48,7 @@ dependencies:
   path_provider: ^2.0.15
   flutter_cache_manager: ^3.3.1
   wakelock_plus: ^1.3.2
+  shared_preferences: ^2.5.3
 
 
 

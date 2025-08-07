@@ -6,7 +6,10 @@ import 'package:probashi_live/ui/profile_tab_view.dart';
 import 'package:probashi_live/ui/shorts_tab_view.dart';
 import 'package:probashi_live/ui/video_tab_view.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../models/user_profile.dart';
+import '../utils/api_service.dart';
 import '../utils/socket_service.dart';
+import '../utils/variables.dart';
 import 'home_tab_view.dart';
 import 'message_tab_view.dart';
 
@@ -42,16 +45,16 @@ class _HomePageState extends State<HomePage> {
   Future<void> _initSocket() async {
     final token = await FlutterSecureStorage().read(key: 'access_token');
     if (token != null) {
+      UserProfile profile = await ApiService.getApiClient().getMyProfile();
+      Variables.currentUser = profile;
       socketService.connect(token);
-
-      socketService.socket.on('connected', (data) {
+      socketService.socket.on('connected', (data) async {
         debugPrint('Socket connected: ${data['message']}');
 
         setState(() {
           _socketConnected = true;
         });
       });
-
       socketService.onNewMessage((message){
         if (_selectedBottomNavIndex != 3) {
           setState(() {
@@ -59,11 +62,7 @@ class _HomePageState extends State<HomePage> {
           });
         }
       });
-
       SocketService.instance.onLiveInvite((inviteData) {
-
-
-        print('Live invite received: $inviteData');
         final from = inviteData['fromUserId'];
         final sessionId = inviteData['sessionId'];
         final to = inviteData['toUserId'];

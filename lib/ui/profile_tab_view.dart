@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:probashi_live/ui/cached_circle_avatar.dart';
 import 'package:probashi_live/ui/top_up_view.dart';
 import 'package:probashi_live/ui/vip_controllers.dart';
 import 'package:probashi_live/utils/api_service.dart';
@@ -158,37 +159,10 @@ class _MyPageState extends State<ProfileTabView> {
                   children: [
                     SizedBox(height: 40),
                     Center(
-                      child: ClipOval(
-                        child: SizedBox(
-                          width: 100, // radius * 2
-                          height: 100,
-                          child: Image.network(
-                            userProfile.profilePic,
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                color: Colors.grey.shade300,
-                                alignment: Alignment.center,
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey,
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.person,
-                                  size: 40,
-                                  color: Colors.white,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
+                        child: CachedCircleAvatar(
+                      imageUrl: userProfile.profilePic,
+                      user: userProfile.settings,
+                      radius: 50,)
                     ),
                     const SizedBox(height: 10),
                     Text(

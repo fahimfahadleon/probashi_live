@@ -1,8 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/src/scheduler/ticker.dart';
 import 'package:probashi_live/models/user_profile.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:probashi_live/ui/cached_network_box_image.dart';
 
 import 'package:svgaplayer_flutter/parser.dart';
 import 'package:svgaplayer_flutter/player.dart';
@@ -10,7 +8,6 @@ import 'package:svgaplayer_flutter/player.dart';
 import '../utils/api_service.dart';
 import '../utils/utils.dart';
 import '../utils/variables.dart';
-import '../models/collection_name_request.dart';
 
 class MyCollections extends StatefulWidget {
   const MyCollections({super.key});
@@ -22,7 +19,7 @@ class MyCollections extends StatefulWidget {
 class _MyCollectionsScreenState extends State<MyCollections> with TickerProviderStateMixin {
   Map<String, List<String>> myCollections = {};
   Map<String, String> activeCollections = {};
-  final Map<String, Map<String, String>> _svgaCache = {};
+
   final SVGAParser parser = SVGAParser();
 
   @override
@@ -55,54 +52,7 @@ class _MyCollectionsScreenState extends State<MyCollections> with TickerProvider
 
 
 
-  Future<Map<String, String>?> _getCachedSvga(String collectionName) async {
-    // 1. Check in-memory cache first
-    if (_svgaCache.containsKey(collectionName)) {
-      return _svgaCache[collectionName];
-    }
 
-    final prefs = await SharedPreferences.getInstance();
-    final cacheKey = 'svga_$collectionName';
-
-    // 2. Check SharedPreferences cache next
-    final cachedJson = prefs.getString(cacheKey);
-    if (cachedJson != null) {
-      try {
-        final Map<String, dynamic> data = jsonDecode(cachedJson);
-        final cachedData = {
-          'imageUrl': data['imageUrl'] as String,
-          'thumbnailUrl': data['thumbnailUrl'] as String,
-        };
-        // Update in-memory cache as well
-        _svgaCache[collectionName] = cachedData;
-        return cachedData;
-      } catch (e) {
-        // Cache corrupted, remove it
-        await prefs.remove(cacheKey);
-      }
-    }
-
-    // 3. Fetch from API if no cache found
-    try {
-      final request = CollectionNameRequest(collectionName);
-      final response = await ApiService.getApiClient().getCollectionSvgaByName(request);
-      final Map<String, dynamic> data = jsonDecode(response);
-
-      final freshData = {
-        'imageUrl': data['imageUrl'] as String,
-        'thumbnailUrl': data['thumbnailUrl'] as String,
-      };
-
-      // Save to caches
-      _svgaCache[collectionName] = freshData;
-      await prefs.setString(cacheKey, jsonEncode(data));
-
-      return freshData;
-    } catch (e) {
-      debugPrint('SVGA fetch error: $e');
-      return null;
-    }
-  }
 
 
   Future<void> _showSVGAPreview(String urls) async {
@@ -167,7 +117,7 @@ class _MyCollectionsScreenState extends State<MyCollections> with TickerProvider
 
       if (activeId != null && activeId.isNotEmpty) {
         content = FutureBuilder<Map<String, String>?>(
-          future: _getCachedSvga(activeId),
+          future: Utils.getThumbAndSvgaUrl(activeId),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return SizedBox(
@@ -330,13 +280,9 @@ class _MyCollectionsScreenState extends State<MyCollections> with TickerProvider
   }
 
 
-
-
-
-
   Widget _buildCollectionItem(String name, bool isActive, String category) {
     return FutureBuilder<Map<String, String>?>(
-      future: _getCachedSvga(name),
+      future: Utils.getThumbAndSvgaUrl(name),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
@@ -374,7 +320,7 @@ class _MyCollectionsScreenState extends State<MyCollections> with TickerProvider
                 : null,
             child: Column(
               children: [
-                Image.network(thumbnailUrl, height: 60, width: 60, fit: BoxFit.cover),
+                CachedNetworkImageBox(imageUrl: thumbnailUrl,height: 60,width: 60,),
                 const SizedBox(height: 4),
                 Text(name, style: const TextStyle(fontSize: 12)),
                 if (isActive)

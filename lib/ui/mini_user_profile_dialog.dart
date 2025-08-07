@@ -47,7 +47,7 @@ class _MiniUserProfileDialogState extends State<MiniUserProfileDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
 
-            CachedCircleAvatar(imageUrl: user.profilePic, radius: 40,),
+            CachedCircleAvatar(imageUrl: user.profilePic, radius: 40, user: user.settings,),
 
             const SizedBox(height: 12),
             Text(

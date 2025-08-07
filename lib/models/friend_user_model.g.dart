@@ -13,6 +13,7 @@ FriendUserModel _$FriendUserModelFromJson(Map<String, dynamic> json) =>
       profilePic: json['profilePic'] as String,
       vipStatus: json['vipStatus'] as bool,
       level: (json['level'] as num).toInt(),
+      settings: json['settings'] as Map<String, dynamic>,
     );
 
 Map<String, dynamic> _$FriendUserModelToJson(FriendUserModel instance) =>
@@ -21,5 +22,6 @@ Map<String, dynamic> _$FriendUserModelToJson(FriendUserModel instance) =>
       'name': instance.name,
       'profilePic': instance.profilePic,
       'vipStatus': instance.vipStatus,
+      'settings': instance.settings,
       'level': instance.level,
     };

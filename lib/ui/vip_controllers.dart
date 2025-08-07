@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:probashi_live/models/collections_category.dart';
+import 'package:probashi_live/ui/cached_network_box_image.dart';
 import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
 import '../models/gift_category.dart';
 import '../models/parchase_collection.dart';
@@ -235,16 +236,7 @@ class _VipControllersState extends State<VipControllers>
                                         _showSVGAPreview(gift.imageUrl),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
-                                      child: Image.network(
-                                        Variables.BASE_URL + gift.thumbnailUrl,
-                                        width: 64,
-                                        height: 64,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => const Icon(
-                                          Icons.broken_image,
-                                          size: 32,
-                                        ),
-                                      ),
+                                      child: CachedNetworkImageBox(imageUrl: Variables.BASE_URL + gift.thumbnailUrl,height: 64,width: 64,)
                                     ),
                                   ),
                                   const SizedBox(height: 4),

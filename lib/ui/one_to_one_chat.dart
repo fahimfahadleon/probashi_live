@@ -128,6 +128,7 @@ class _ChatPageState extends State<ChatPage> {
     final avatar = isMine
         ? currentUserProfile.profilePic
         : otherUserProfile.profilePic;
+    final user = isMine ? currentUserProfile : otherUserProfile;
 
     return Row(
       mainAxisAlignment: isMine
@@ -137,7 +138,7 @@ class _ChatPageState extends State<ChatPage> {
       children: [
         if (!isMine) ...[
           const SizedBox(width: 8),
-          userAvatar(avatar),
+          userAvatar(avatar,user),
           const SizedBox(width: 6),
         ],
         Flexible(
@@ -160,7 +161,7 @@ class _ChatPageState extends State<ChatPage> {
         ),
         if (isMine) ...[
           const SizedBox(width: 6),
-          userAvatar(avatar),
+          userAvatar(avatar,user),
           const SizedBox(width: 8),
         ],
       ],
@@ -227,7 +228,7 @@ class _ChatPageState extends State<ChatPage> {
           backgroundColor: Colors.teal,
           title: Row(
             children: [
-              userAvatar(otherUserProfile.profilePic),
+              userAvatar(otherUserProfile.profilePic,otherUserProfile),
               const SizedBox(width: 10),
               Text(
                 otherUserProfile.name,
@@ -263,7 +264,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Widget userAvatar(String? imageUrl) {
-    return CachedCircleAvatar(imageUrl: imageUrl);
+  Widget userAvatar(String? imageUrl, UserProfile userProfile) {
+    return CachedCircleAvatar(imageUrl: imageUrl,user: userProfile.settings,);
   }
 }

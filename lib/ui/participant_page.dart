@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:probashi_live/models/live_session.dart';
+import 'package:probashi_live/ui/comment_list.dart';
 import 'package:probashi_live/ui/participant_video_widget.dart';
 import 'package:svgaplayer_flutter/player.dart';
 
@@ -17,8 +16,6 @@ import '../utils/variables.dart';
 import '../models/live_comment.dart'; // your model imports
 import '../models/live_user.dart';
 import 'cached_circle_avatar.dart';
-import 'mini_user_profile_dialog.dart';
-import 'one_to_one_chat.dart';
 
 class ParticipantPage extends StatefulWidget {
   final String sessionId;
@@ -89,6 +86,9 @@ class _ParticipantPageState extends State<ParticipantPage>
     SocketService.instance.onLiveDetailData((data) {
       setState(() {
         session = data;
+
+        print("session: ${session.toJson()}");
+
         liveName = session.hosts.first.user.name;
         profilePicture = session.hosts.first.user.profilePic;
         isSessionLoaded = true; // mark as ready
@@ -96,13 +96,29 @@ class _ParticipantPageState extends State<ParticipantPage>
     });
     // Typed model callbacks
     SocketService.instance.onNewComment((comment) {
-      setState(() {
-        comments.add(comment);
-      });
-    });
-    SocketService.instance.onParticipantJoined((participant) {
+      const joinSuffix = "has joined the Live.!@";
 
+      if (comment.message.contains(joinSuffix)) {
+        Utils.handleUserJoined(context, comment.liveUser.user);
+
+        final cleanedMessage = comment.message.replaceAll("!@", "");
+        final modifiedComment = LiveComment(
+          id: comment.id,
+          liveUser: comment.liveUser,
+          message: cleanedMessage,
+          createdAt: comment.createdAt,
+        );
+
+        setState(() {
+          comments.add(modifiedComment);
+        });
+      } else {
+        setState(() {
+          comments.add(comment);
+        });
+      }
     });
+    SocketService.instance.onParticipantJoined((participant) {});
     SocketService.instance.onParticipantLeft((participant) {
       setState(
         () => participants.removeWhere((p) => p.user.id == participant.user.id),
@@ -123,50 +139,14 @@ class _ParticipantPageState extends State<ParticipantPage>
     });
 
     SocketService.instance.onSessionUpdated((updatedSession) {
-      final jsonStr = jsonEncode(updatedSession);
-      const chunkSize = 1000;
-
-      for (var i = 0; i < jsonStr.length; i += chunkSize) {
-        final chunk = jsonStr.substring(i, i + chunkSize > jsonStr.length ? jsonStr.length : i + chunkSize);
-        print("updated session: $chunk");
-
-
-
-        // {"id":"cmdu3em7p000aw568gkrwet2l",
-        // "startedAt":"2025-08-02T10:11:26.582Z",
-        // "endedAt":null,
-        // "createdAt":"2025-08-02T10:11:26.582Z",
-        // "updatedAt":"2025-08-02T10:11:26.582Z",
-        // "hosts":[{"id":"cmdu3em7u000cw568s4m7ncf0","userId":"104404868134225253819","hostSessionId":"cmdu3em7p000aw568gkrwet2l","isHost":true,"joinedAt":"2025-08-02T10:11:26.585Z","leftAt":null,"role":"host","user":{"id":"104404868134225253819","name":"Munni afrin Mim","profilePic":"https://lh3.googleusercontent.com/a/ACg8ocKvFUatII6nCQ4I4GaY8kBCXlIselw8ZEjzCvb-KRXJPpnSjg=s96-c","bio":"","coin":0,"diamond":86,"level":1,"vipStatus":false,"badge":null,"settings":{},"extra":{},"isBlocked":false,"createdAt":"2025-07-27T18:53:38.472Z","updatedAt":"2025-08-01T12:35:38.215Z","stats":null,"relation":null}}],
-        // "participants":[{"id":"cmdu3es3w000ew568hgbtk8z3","userId":"103865825091821177694","participantSessionId":"cmdu3em7p000aw568gkrwet2l","isHost":false,"joinedAt":"2025-08-02T10:11:34.219Z","leftAt":null,"role":"participant","user":{"id":"103865825091821177694","name":"fahim fahad fahim","profilePic":"https://lh3.googleusercontent.com/a/ACg8ocLtA2MNyEAvZ4M-fUPUrFBhJnoHnnjT92KOwY3QwvnFWNYwWXw=s96-c","bio":"","coin":0,"diamond":11914,"level":6,"vipStatus":true,"badge":null,"settings":{},"extra":{},"isBlocked":false,"createdAt":"2025-07-27T18:51:55.965Z","updatedAt":"2025-08-01T12:35:38.209Z","stats":null,"relation":null}}],
-        // "audience":[],
-        // "comments":[],
-        // "gifts":[]}
-
-
-        //{"id":"cmdu3em7p000aw568gkrwet2l",
-        // "startedAt":"2025-08-02T10:11:26.582Z",
-        // "endedAt":null,
-        // "createdAt":"2025-08-02T10:11:26.582Z",
-        // "updatedAt":"2025-08-02T10:11:26.582Z",
-        // "hosts":[{"id":"cmdu3em7u000cw568s4m7ncf0","userId":"104404868134225253819","hostSessionId":"cmdu3em7p000aw568gkrwet2l","isHost":true,"joinedAt":"2025-08-02T10:11:26.585Z","leftAt":null,"role":"host","user":{"id":"104404868134225253819","name":"Munni afrin Mim","profilePic":"https://lh3.googleusercontent.com/a/ACg8ocKvFUatII6nCQ4I4GaY8kBCXlIselw8ZEjzCvb-KRXJPpnSjg=s96-c","bio":"","coin":0,"diamond":86,"level":1,"vipStatus":false,"badge":null,"settings":{},"extra":{},"isBlocked":false,"createdAt":"2025-07-27T18:53:38.472Z","updatedAt":"2025-08-01T12:35:38.215Z","stats":null,"relation":null}}],
-        // "participants":[{"id":"cmdu3es3w000ew568hgbtk8z3","userId":"103865825091821177694","participantSessionId":"cmdu3em7p000aw568gkrwet2l","isHost":false,"joinedAt":"2025-08-02T10:11:34.219Z","leftAt":null,"role":"participant","user":{"id":"103865825091821177694","name":"fahim fahad fahim","profilePic":"https://lh3.googleusercontent.com/a/ACg8ocLtA2MNyEAvZ4M-fUPUrFBhJnoHnnjT92KOwY3QwvnFWNYwWXw=s96-c","bio":"","coin":0,"diamond":11914,"level":6,"vipStatus":true,"badge":null,"settings":{},"extra":{},"isBlocked":false,"createdAt":"2025-07-27T18:51:55.965Z","updatedAt":"2025-08-01T12:35:38.209Z","stats":null,"relation":null}},{"id":"cmdu3fn0p000gw568sspsljv0","userId":"114806937760278912062","participantSessionId":"cmdu3em7p000aw568gkrwet2l","isHost":false,"joinedAt":"2025-08-02T10:12:14.280Z","leftAt":null,"role":"participant","user":{"id":"114806937760278912062","name":"Fahim Fahad Leo","profilePic":"https://lh3.googleusercontent.com/a/ACg8ocJu4Qp1GXg3GZQviXPzt4wsoJtM3oV2Q-mpvb6MH6ROu9ciHg=s96-c","bio":"","coin":0,"diamond":0,"level":1,"vipStatus":false,"badge":null,"settings":{},"extra":{},"isBlocked":false,"createdAt":"2025-07-31T19:37:35.053Z","updatedAt":"2025-07-31T19:37:35.053Z","stats":null,"relation":null}}],
-        // "audience":[],"comments":[],"gifts":[]}
-
-
-      }
-
       session = updatedSession;
-
+      print("session2: ${session.toJson()}");
       setState(() {
-        participants = Utils.addLiveUsersWithoutDuplicates(participants, session.participants);
+        participants = Utils.addLiveUsersWithoutDuplicates(
+          participants,
+          session.participants,
+        );
       });
-
-      for(LiveUser u in participants){
-        print("participants: ${u.toJson()}");
-      }
-
-
     });
 
     SocketService.instance.onLiveEnded((sessionData) {
@@ -267,12 +247,10 @@ class _ParticipantPageState extends State<ParticipantPage>
   }
 
   Widget _buildStreamGrid() {
-
     String hostId = session.hosts.first.user.id;
     final guestParticipants = participants
         .where((user) => user.userId != SocketService.instance.userId)
         .toList(); // Only up to 4 guests
-
 
     // --- Top Row: Host + Self (AndroidView) ---
     final topRow = Row(
@@ -316,8 +294,8 @@ class _ParticipantPageState extends State<ParticipantPage>
           final userId = p.userId;
 
           String streamUrl = "${Variables.RTMP_URL}/$userId";
-//rtmp://192.168.11.4:1935/live/114806937760278912062
-//rtmp://192.168.11.4:1935/live/114806937760278912062
+          //rtmp://192.168.11.4:1935/live/114806937760278912062
+          //rtmp://192.168.11.4:1935/live/114806937760278912062
           print("Stream Url: $streamUrl");
           return Expanded(
             child: Padding(
@@ -326,9 +304,7 @@ class _ParticipantPageState extends State<ParticipantPage>
                 aspectRatio: 9 / 16,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16.0),
-                  child: ParticipantVideoWidget(
-                    streamUrl: streamUrl,
-                  ),
+                  child: ParticipantVideoWidget(streamUrl: streamUrl),
                 ),
               ),
             ),
@@ -349,7 +325,6 @@ class _ParticipantPageState extends State<ParticipantPage>
       ],
     );
   }
-
 
   @override
   void dispose() {
@@ -415,7 +390,9 @@ class _ParticipantPageState extends State<ParticipantPage>
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
+                              color: Colors.black.withValues(
+                                alpha: (0.6 * 255).toDouble(),
+                              ),
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
@@ -466,164 +443,87 @@ class _ParticipantPageState extends State<ParticipantPage>
 
           if (isStreaming) ...[
             Positioned(
-              top: 40,
+              top: 20,
               left: 16,
               right: 16,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: () async {
-                      final tappedUserId = session.hosts.first.userId;
-
-                      // Prevent showing own profile
-                      if (tappedUserId == SocketService.instance.userId) return;
-
-                      try {
-                        // Load stats and profile
-                        UserStats stats = await ApiService.getApiClient()
-                            .getUserStats(tappedUserId);
-                        UserProfile profile = await ApiService.getApiClient()
-                            .getUserProfile(tappedUserId);
-                        profile.stats = stats;
-
-                        _showMiniProfileDialog(profile);
-                      } catch (e) {
-                        print("Error loading profile: $e");
-                      }
-                    },
-                    child: CachedCircleAvatar(
-                      imageUrl: profilePicture,
-                      radius: 20,
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  // Vertically center all
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final tappedUserId = session.hosts.first.userId;
+                        if (tappedUserId == SocketService.instance.userId)
+                          return;
+                        try {
+                          UserStats stats = await ApiService.getApiClient()
+                              .getUserStats(tappedUserId);
+                          UserProfile profile = await ApiService.getApiClient()
+                              .getUserProfile(tappedUserId);
+                          profile.stats = stats;
+                          Utils.showMiniProfileDialog(profile, context);
+                        } catch (e) {
+                          print("Error loading profile: $e");
+                        }
+                      },
+                      child: CachedCircleAvatar(
+                        imageUrl: profilePicture,
+                        user: session.hosts.first.user.settings,
+                        radius: 20,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          liveName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min, // Prevent stretching
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            liveName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.remove_red_eye,
-                              size: 14,
-                              color: Colors.white70,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              "$viewerCount viewers",
-                              style: const TextStyle(
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.remove_red_eye,
+                                size: 14,
                                 color: Colors.white70,
-                                fontSize: 12,
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
+                              const SizedBox(width: 4),
+                              Text(
+                                "$viewerCount viewers",
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: _onClosePressed,
-                  ),
-                ],
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: _onClosePressed,
+                    ),
+                  ],
+                ),
               ),
             ),
+
             if (showCommentList)
               Positioned(
                 left: 0,
                 bottom: keyboardHeight + 60,
-                height: MediaQuery.of(context).size.height * 0.4,
+                height: MediaQuery.of(context).size.height * 0.3,
                 width: MediaQuery.of(context).size.width * 0.8,
-                child: ListView.builder(
-                  reverse: true,
-                  itemCount: comments.length,
-                  itemBuilder: (context, index) {
-                    final c = comments[comments.length - 1 - index];
-                    final userName = c.liveUser.user.name;
-                    final message = c.message;
-                    //final userId = c.liveUser.id;
-
-                    return Container(
-                      margin: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 8,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()), // customize later
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        // Align top of texts with avatar
-                        children: [
-                          GestureDetector(
-                            onTap: () async {
-                              if (c.liveUser.user.id ==
-                                  SocketService.instance.userId) {
-                                return;
-                              }
-
-                              UserStats state = await ApiService.getApiClient()
-                                  .getUserStats(c.liveUser.user.id);
-                              c.liveUser.user.stats = state;
-
-                              UserProfile profile =
-                                  await ApiService.getApiClient()
-                                      .getUserProfile(c.liveUser.user.id);
-                              UserStats states = await ApiService.getApiClient()
-                                  .getUserStats(c.liveUser.user.id);
-                              profile.stats = states;
-
-                              _showMiniProfileDialog(profile);
-                            },
-                            child: CachedCircleAvatar(
-                              imageUrl: c.liveUser.user.profilePic,
-                              radius: 16,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  userName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow
-                                      .ellipsis, // Truncate if too long
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  message,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                child: CommentList(comments: comments),
               ),
 
             if (showControlsPanel)
@@ -638,7 +538,9 @@ class _ParticipantPageState extends State<ParticipantPage>
                     horizontal: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
+                    color: Colors.black.withValues(
+                      alpha: (0.6 * 255).toDouble(),
+                    ),
                     border: Border.all(color: Colors.white70, width: 1.5),
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -732,36 +634,6 @@ class _ParticipantPageState extends State<ParticipantPage>
             ),
           ],
         ],
-      ),
-    );
-  }
-
-  void _showMiniProfileDialog(UserProfile userProfile) {
-    showDialog(
-      context: context,
-      builder: (context) => MiniUserProfileDialog(
-        userProfile: userProfile,
-        onRelationToggle: () async {
-          try {
-            final newRelation = await Utils.toggleFollowStatus(userProfile);
-            return newRelation;
-          } catch (e) {
-            print(e);
-            return UserRelation(isFollowing: false, isFriend: false);
-          }
-        },
-        onMessage: () {
-          Navigator.of(context).pop();
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ChatPage(
-                currentUserId: SocketService.instance.userId,
-                otherUserId: userProfile.id,
-              ),
-            ),
-          );
-        },
       ),
     );
   }

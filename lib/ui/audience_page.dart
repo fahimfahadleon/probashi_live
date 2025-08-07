@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:probashi_live/models/live_gift.dart';
 import 'package:probashi_live/models/live_session.dart';
+import 'package:probashi_live/ui/comment_list.dart';
 import 'package:probashi_live/ui/decorated_participant_view.dart';
+import 'package:probashi_live/ui/participant_video_widget.dart';
 import 'package:svgaplayer_flutter/player.dart';
 
 import '../models/gift.dart';
@@ -14,8 +16,6 @@ import '../utils/utils.dart';
 import '../utils/variables.dart';
 import 'cached_circle_avatar.dart';
 import 'gift_dialog.dart';
-import 'mini_user_profile_dialog.dart';
-import 'one_to_one_chat.dart';
 
 class AudiencePage extends StatefulWidget {
   final LiveSession liveSession;
@@ -66,12 +66,28 @@ class _AudiencePageState extends State<AudiencePage>
     _svgaController = SVGAAnimationController(vsync: this);
     SocketService.instance.joinAudience(widget.sessionId);
     SocketService.instance.onNewComment((comment) {
-      setState(() {
-        Utils.printGreenComment(comment.message);
-        comments.add(comment);
-      });
-    });
+      const joinSuffix = "has joined the Live.!@";
 
+      if (comment.message.contains(joinSuffix)) {
+        Utils.handleUserJoined(context, comment.liveUser.user);
+
+        final cleanedMessage = comment.message.replaceAll("!@", "");
+        final modifiedComment = LiveComment(
+          id: comment.id,
+          liveUser: comment.liveUser,
+          message: cleanedMessage,
+          createdAt: comment.createdAt,
+        );
+
+        setState(() {
+          comments.add(modifiedComment);
+        });
+      } else {
+        setState(() {
+          comments.add(comment);
+        });
+      }
+    });
     SocketService.instance.onParticipantJoined((participant) {
       // setState(() => participants.add(participant));
     });
@@ -164,18 +180,7 @@ class _AudiencePageState extends State<AudiencePage>
     if (participants.isEmpty) {
       return AspectRatio(
         aspectRatio: 9 / 16,
-        child: DecoratedParticipantView(
-          streamUrl: mainStreamUrl,
-          avatarUrl: widget.liveSession.hosts.first.user.profilePic,
-          onProfileTap: () async {
-            UserStats stats = await ApiService.getApiClient().getUserStats(widget.hostUserId);
-            UserProfile profile = await ApiService.getApiClient().getUserProfile(widget.hostUserId);
-            profile.stats = stats;
-            _showMiniProfileDialog(profile);
-          },
-          onGiftTap: () => showGiftDialog(widget.hostUserId),
-          overlayText: widget.liveSession.hosts.first.user.name,
-        ),
+        child: ParticipantVideoWidget(streamUrl: mainStreamUrl),
       );
     }
 
@@ -193,11 +198,14 @@ class _AudiencePageState extends State<AudiencePage>
               child: DecoratedParticipantView(
                 streamUrl: mainStreamUrl,
                 avatarUrl: widget.liveSession.hosts.first.user.profilePic,
+                liveUser: widget.liveSession.hosts.first.user,
                 onProfileTap: () async {
-                  UserStats stats = await ApiService.getApiClient().getUserStats(widget.hostUserId);
-                  UserProfile profile = await ApiService.getApiClient().getUserProfile(widget.hostUserId);
+                  UserStats stats = await ApiService.getApiClient()
+                      .getUserStats(widget.hostUserId);
+                  UserProfile profile = await ApiService.getApiClient()
+                      .getUserProfile(widget.hostUserId);
                   profile.stats = stats;
-                  _showMiniProfileDialog(profile);
+                  Utils.showMiniProfileDialog(profile, context);
                 },
                 onGiftTap: () => showGiftDialog(widget.hostUserId),
                 overlayText: widget.liveSession.hosts.first.user.name,
@@ -215,11 +223,14 @@ class _AudiencePageState extends State<AudiencePage>
               child: DecoratedParticipantView(
                 streamUrl: "${Variables.RTMP_URL}/$participantid",
                 avatarUrl: participants.first.user.profilePic,
+                liveUser: participants.first.user,
                 onProfileTap: () async {
-                  UserStats stats = await ApiService.getApiClient().getUserStats(participantid);
-                  UserProfile profile = await ApiService.getApiClient().getUserProfile(participantid);
+                  UserStats stats = await ApiService.getApiClient()
+                      .getUserStats(participantid);
+                  UserProfile profile = await ApiService.getApiClient()
+                      .getUserProfile(participantid);
                   profile.stats = stats;
-                  _showMiniProfileDialog(profile);
+                  Utils.showMiniProfileDialog(profile, context);
                 },
                 onGiftTap: () => showGiftDialog(participantid),
                 overlayText: participants.first.user.name,
@@ -249,11 +260,14 @@ class _AudiencePageState extends State<AudiencePage>
                   child: DecoratedParticipantView(
                     streamUrl: "${Variables.RTMP_URL}/$userId",
                     avatarUrl: p.user.profilePic,
+                    liveUser: p.user,
                     onProfileTap: () async {
-                      UserStats stats = await ApiService.getApiClient().getUserStats(userId);
-                      UserProfile profile = await ApiService.getApiClient().getUserProfile(userId);
+                      UserStats stats = await ApiService.getApiClient()
+                          .getUserStats(userId);
+                      UserProfile profile = await ApiService.getApiClient()
+                          .getUserProfile(userId);
                       profile.stats = stats;
-                      _showMiniProfileDialog(profile);
+                      Utils.showMiniProfileDialog(profile, context);
                     },
                     onGiftTap: () => showGiftDialog(userId),
                     overlayText: p.user.name,
@@ -278,7 +292,6 @@ class _AudiencePageState extends State<AudiencePage>
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
@@ -301,76 +314,73 @@ class _AudiencePageState extends State<AudiencePage>
 
           // Streamer name + close button
           Positioned(
-            top: 40,
+            top: 20,
             left: 16,
             right: 16,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onTap: () async {
-                    final tappedUserId = widget.hostUserId;
-
-                    // Prevent showing own profile
-                    if (tappedUserId == SocketService.instance.userId) return;
-
-                    try {
-                      // Load stats and profile
-                      UserStats stats = await ApiService.getApiClient()
-                          .getUserStats(tappedUserId);
-                      UserProfile profile = await ApiService.getApiClient()
-                          .getUserProfile(tappedUserId);
-                      profile.stats = stats;
-
-                      _showMiniProfileDialog(profile);
-                    } catch (e) {
-                      print("Error loading profile: $e");
-                    }
-                  },
-                  child: CachedCircleAvatar(
-                    imageUrl: widget.liveSession.hosts.first.user.profilePic,
-                    radius: 20,
+            child: IntrinsicHeight( // ensures children size themselves correctly
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center, // center all vertically
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      final tappedUserId = widget.hostUserId;
+                      if (tappedUserId == SocketService.instance.userId) return;
+                      try {
+                        UserStats stats = await ApiService.getApiClient().getUserStats(tappedUserId);
+                        UserProfile profile = await ApiService.getApiClient().getUserProfile(tappedUserId);
+                        profile.stats = stats;
+                        Utils.showMiniProfileDialog(profile, context);
+                      } catch (e) {
+                        print("Error loading profile: $e");
+                      }
+                    },
+                    child: CachedCircleAvatar(
+                      imageUrl: widget.liveSession.hosts.first.user.profilePic,
+                      user: widget.liveSession.hosts.first.user.settings,
+                      radius: 20,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.liveSession.hosts.first.user.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min, // ensures vertical shrink-wrap
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.liveSession.hosts.first.user.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.remove_red_eye,
-                            size: 14,
-                            color: Colors.white70,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            "$viewerCount viewers",
-                            style: const TextStyle(
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.remove_red_eye,
+                              size: 14,
                               color: Colors.white70,
-                              fontSize: 12,
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            const SizedBox(width: 4),
+                            Text(
+                              "$viewerCount viewers",
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
             ),
           ),
           if (_showGiftAnimation)
@@ -400,7 +410,9 @@ class _AudiencePageState extends State<AudiencePage>
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: (0.5 * 255).toDouble()),
+                              color: Colors.black.withValues(
+                                alpha: (0.5 * 255).toDouble(),
+                              ),
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
@@ -454,88 +466,9 @@ class _AudiencePageState extends State<AudiencePage>
             Positioned(
               left: 0,
               bottom: keyboardHeight + 60,
-              height: MediaQuery.of(context).size.height * 0.4,
+              height: MediaQuery.of(context).size.height * 0.3,
               width: MediaQuery.of(context).size.width * 0.8,
-              child: ListView.builder(
-                reverse: true,
-                itemCount: comments.length,
-                itemBuilder: (context, index) {
-                  final c = comments[comments.length - 1 - index];
-                  return Container(
-                    margin: const EdgeInsets.symmetric(
-                      vertical: 4,
-                      horizontal: 8,
-                    ),
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: (0.5 * 255).toDouble()),
-                      // placeholder bg color
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Profile picture
-                        GestureDetector(
-                          onTap: () async {
-                            if (c.liveUser.user.id !=
-                                SocketService.instance.userId) {
-                              Utils.printGreenComment(
-                                c.liveUser.user.toJson().toString(),
-                              );
-
-                              if (c.liveUser.user.id == SocketService.instance.userId) {
-                                return;
-                              }
-
-                              UserStats state = await ApiService.getApiClient()
-                                  .getUserStats(c.liveUser.user.id);
-                              c.liveUser.user.stats = state;
-
-                              UserProfile profile =
-                                  await ApiService.getApiClient()
-                                      .getUserProfile(c.liveUser.user.id);
-                              UserStats states = await ApiService.getApiClient()
-                                  .getUserStats(c.liveUser.user.id);
-                              profile.stats = states;
-
-                              _showMiniProfileDialog(profile);
-                            }
-                          },
-                          child: CachedCircleAvatar(
-                            imageUrl: c.liveUser.user.profilePic,
-                            radius: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Username + message as two lines
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                c.liveUser.user.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                c.message,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              child: CommentList(comments: comments),
             ),
 
           // Controls Panel
@@ -606,7 +539,7 @@ class _AudiencePageState extends State<AudiencePage>
                     ),
                   ),
                   IconButton(
-                    onPressed: (){
+                    onPressed: () {
                       showGiftDialog(widget.hostUserId);
                     },
                     icon: Icon(
@@ -631,41 +564,6 @@ class _AudiencePageState extends State<AudiencePage>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showMiniProfileDialog(UserProfile userProfile) {
-    // Optionally prevent showing own profile
-    if (userProfile.id == SocketService.instance.userId) return;
-
-    Utils.printGreenComment(userProfile.toJson().toString());
-
-    showDialog(
-      context: context,
-      builder: (context) => MiniUserProfileDialog(
-        userProfile: userProfile,
-        onRelationToggle: () async {
-          try {
-            final newRelation = await Utils.toggleFollowStatus(userProfile);
-            return newRelation;
-          } catch (e) {
-            print(e);
-            return UserRelation(isFollowing: false, isFriend: false);
-          }
-        },
-        onMessage: () {
-          Navigator.pop(context);
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ChatPage(
-                currentUserId: SocketService.instance.userId,
-                otherUserId: userProfile.id,
-              ),
-            ),
-          );
-        },
       ),
     );
   }

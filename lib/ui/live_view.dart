@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:probashi_live/models/live_session.dart';
+import 'package:probashi_live/ui/comment_list.dart';
 import 'package:probashi_live/ui/participant_video_widget.dart';
 import 'package:svgaplayer_flutter/player.dart';
 
@@ -19,8 +20,6 @@ import '../utils/variables.dart';
 import '../models/live_comment.dart'; // your model imports
 import '../models/live_user.dart';
 import 'cached_circle_avatar.dart';
-import 'mini_user_profile_dialog.dart';
-import 'one_to_one_chat.dart';
 
 class LivePage extends StatefulWidget {
   const LivePage({super.key});
@@ -85,10 +84,27 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
 
     // Typed model callbacks
     SocketService.instance.onNewComment((comment) {
-      setState(() {
-        Utils.printGreenComment(comment.message);
-        comments.add(comment);
-      });
+      const joinSuffix = "has joined the Live.!@";
+
+      if (comment.message.contains(joinSuffix)) {
+        Utils.handleUserJoined(context, comment.liveUser.user);
+
+        final cleanedMessage = comment.message.replaceAll("!@", "");
+        final modifiedComment = LiveComment(
+          id: comment.id,
+          liveUser: comment.liveUser,
+          message: cleanedMessage,
+          createdAt: comment.createdAt,
+        );
+
+        setState(() {
+          comments.add(modifiedComment);
+        });
+      } else {
+        setState(() {
+          comments.add(comment);
+        });
+      }
     });
     SocketService.instance.onParticipantJoined((participant) {
       // setState(() => participants.add(participant));
@@ -96,8 +112,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     SocketService.instance.onParticipantLeft((participant) {
       setState(() {
         participants.removeWhere((p) => p.user.id == participant.user.id);
-      }
-      );
+      });
     });
 
     SocketService.instance.onAudienceJoined((audienceUser) {
@@ -120,8 +135,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
       final isSameLength = participants.length == updated.length;
       final isSameContent =
           isSameLength &&
-              participants.every((p) =>
-                  updated.any((u) => u.user.id == p.user.id));
+          participants.every((p) => updated.any((u) => u.user.id == p.user.id));
 
       if (!isSameLength || !isSameContent) {
         setState(() {
@@ -151,82 +165,82 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
       showFriendInviteDialog(context, friendList);
     });
 
-    SocketService.instance.onInviteAccepted((data) {
-
-    });
+    SocketService.instance.onInviteAccepted((data) {});
     SocketService.instance.onInviteCanceled((data) {
       Utils.showToast(context, "Invite canceled");
     });
   }
 
-  void showFriendInviteDialog(BuildContext context,
-      List<FriendUserModel> friendList,) {
+  void showFriendInviteDialog(
+    BuildContext context,
+    List<FriendUserModel> friendList,
+  ) {
     showDialog(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            title: const Text('Invite a Friend'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: friendList.length,
-                separatorBuilder: (_, __) => const Divider(),
-                itemBuilder: (context, index) {
-                  final friend = friendList[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Row(
+      builder: (context) => AlertDialog(
+        title: const Text('Invite a Friend'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: friendList.length,
+            separatorBuilder: (_, __) => const Divider(),
+            itemBuilder: (context, index) {
+              final friend = friendList[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  children: [
+                    // Profile picture
+                    CachedCircleAvatar(
+                      imageUrl: friend.profilePic,
+                      radius: 10,
+                      user: friend.settings,
+                    ),
+                    const SizedBox(width: 12),
+
+                    // Name (takes available space)
+                    Expanded(
+                      child: Text(
+                        friend.name,
+                        style: const TextStyle(fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+
+                    // VIP + Invite icon group
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Profile picture
-                        CachedCircleAvatar(
-                            imageUrl: friend.profilePic, radius: 20),
-
-                        const SizedBox(width: 12),
-
-                        // Name (takes available space)
-                        Expanded(
-                          child: Text(
-                            friend.name,
-                            style: const TextStyle(fontSize: 16),
-                            overflow: TextOverflow.ellipsis,
+                        if (friend.vipStatus)
+                          const Icon(Icons.star, color: Colors.amber, size: 20),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.person_add_alt_1,
+                            color: Colors.blue,
                           ),
-                        ),
-
-                        // VIP + Invite icon group
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (friend.vipStatus)
-                              const Icon(Icons.star, color: Colors.amber,
-                                  size: 20),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.person_add_alt_1,
-                                color: Colors.blue,
-                              ),
-                              onPressed: () {
-                                SocketService.instance.inviteToJoinLive(
-                                  fromUserId: SocketService.instance.userId,
-                                  toUserId: friend.id,
-                                  sessionId: session.id,
-                                );
-                                Navigator.pop(context);
-                                Utils.showToast(
-                                  context,
-                                  "Invite sent to ${friend.name}",
-                                );
-                              },
-                            ),
-                          ],
+                          onPressed: () {
+                            SocketService.instance.inviteToJoinLive(
+                              fromUserId: SocketService.instance.userId,
+                              toUserId: friend.id,
+                              sessionId: session.id,
+                            );
+                            Navigator.pop(context);
+                            Utils.showToast(
+                              context,
+                              "Invite sent to ${friend.name}",
+                            );
+                          },
                         ),
                       ],
                     ),
-                  );
-                },
-              ),
-            ),
+                  ],
+                ),
+              );
+            },
           ),
+        ),
+      ),
     );
   }
 
@@ -243,21 +257,20 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     final confirm = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          AlertDialog(
-            title: const Text("Start Live Stream?"),
-            content: const Text("Do you want to go live now?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text("No"),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text("Yes"),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text("Start Live Stream?"),
+        content: const Text("Do you want to go live now?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("No"),
           ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Yes"),
+          ),
+        ],
+      ),
     );
     if (confirm == true) {
       final rtmpUrl = "${Variables.RTMP_URL}/${SocketService.instance.userId}";
@@ -273,22 +286,20 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   Future<bool> _confirmEndStream() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            title: const Text("End Live Stream"),
-            content: const Text(
-                "Are you sure you want to end the live stream?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text("Cancel"),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text("End"),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text("End Live Stream"),
+        content: const Text("Are you sure you want to end the live stream?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancel"),
           ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("End"),
+          ),
+        ],
+      ),
     );
     return confirm ?? false;
   }
@@ -366,12 +377,12 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
       },
       onCreatePlatformView: (params) {
         return PlatformViewsService.initSurfaceAndroidView(
-          id: params.id,
-          viewType: 'generic_stream_view',
-          layoutDirection: TextDirection.ltr,
-          creationParams: {},
-          creationParamsCodec: const StandardMessageCodec(),
-        )
+            id: params.id,
+            viewType: 'generic_stream_view',
+            layoutDirection: TextDirection.ltr,
+            creationParams: {},
+            creationParamsCodec: const StandardMessageCodec(),
+          )
           ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
           ..create();
       },
@@ -398,21 +409,22 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
 
     // First non-host participant (right side)
     final firstParticipant = participants.firstWhere(
-          (p) => p.user.id != hostId,
+      (p) => p.user.id != hostId,
     );
 
     final participantVLCView = firstParticipant != null
         ? Expanded(
-      child: AspectRatio(
-        aspectRatio: 9 / 16,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16.0),
-          child: ParticipantVideoWidget(
-            streamUrl: "${Variables.RTMP_URL}/${firstParticipant.user.id}",
-          ),
-        ),
-      ),
-    )
+            child: AspectRatio(
+              aspectRatio: 9 / 16,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16.0),
+                child: ParticipantVideoWidget(
+                  streamUrl:
+                      "${Variables.RTMP_URL}/${firstParticipant.user.id}",
+                ),
+              ),
+            ),
+          )
         : const Expanded(child: SizedBox.shrink());
 
     final topRow = Row(children: [hostView, participantVLCView]);
@@ -436,8 +448,8 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16.0),
                   child: ParticipantVideoWidget(
-                      streamUrl: "${Variables.RTMP_URL}/$userId",
-                  )
+                    streamUrl: "${Variables.RTMP_URL}/$userId",
+                  ),
                 ),
               ),
             ),
@@ -458,7 +470,6 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     );
   }
 
-
   @override
   void dispose() {
     _svgaController?.dispose();
@@ -472,10 +483,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardHeight = MediaQuery
-        .of(context)
-        .viewInsets
-        .bottom;
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -484,13 +492,13 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
         child: Stack(
           children: [
             Positioned.fill(
-                child: Align(
-                    alignment: const Alignment(0, -1),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 100),
-                      child: _buildStreamGrid(),
-                    )
-                )
+              child: Align(
+                alignment: const Alignment(0, -1),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 50),
+                  child: _buildStreamGrid(),
+                ),
+              ),
             ),
 
             if (_showGiftAnimation)
@@ -503,23 +511,14 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                       children: [
                         // SVGA Animation
                         SizedBox(
-                          width: MediaQuery
-                              .of(context)
-                              .size
-                              .width,
-                          height: MediaQuery
-                              .of(context)
-                              .size
-                              .height,
+                          width: MediaQuery.of(context).size.width,
+                          height: MediaQuery.of(context).size.height,
                           child: SVGAImage(_svgaController!),
                         ),
 
                         // Floating Text at 20% screen height
                         Positioned(
-                          top: MediaQuery
-                              .of(context)
-                              .size
-                              .height * 0.1,
+                          top: MediaQuery.of(context).size.height * 0.1,
                           left: 0,
                           right: 0,
                           child: Center(
@@ -529,7 +528,9 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                                 vertical: 12,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
+                                color: Colors.black.withValues(
+                                  alpha: (0.6 * 255).toDouble(),
+                                ),
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
@@ -580,192 +581,93 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
 
             if (isStreaming) ...[
               Positioned(
-                top: 40,
+                top: 20,
                 left: 16,
                 right: 16,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () async {
-                        final tappedUserId = session.hosts.first.userId;
-
-                        // Prevent showing own profile
-                        if (tappedUserId == SocketService.instance.userId)
-                          return;
-
-                        try {
-                          // Load stats and profile
-                          UserStats stats = await ApiService.getApiClient()
-                              .getUserStats(tappedUserId);
-                          UserProfile profile = await ApiService.getApiClient()
-                              .getUserProfile(tappedUserId);
-                          profile.stats = stats;
-
-                          _showMiniProfileDialog(profile);
-                        } catch (e) {
-                          print("Error loading profile: $e");
-                        }
-                      },
-                      child: CachedCircleAvatar(
-                        imageUrl: profilePicture,
-                        radius: 20,
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    // Vertically center everything
+                    children: [
+                      GestureDetector(
+                        onTap: () async {
+                          final tappedUserId = session.hosts.first.userId;
+                          if (tappedUserId == SocketService.instance.userId) {
+                            return;
+                          }
+                          try {
+                            UserStats stats = await ApiService.getApiClient().getUserStats(tappedUserId);
+                            UserProfile profile =
+                                await ApiService.getApiClient().getUserProfile(
+                                  tappedUserId,
+                                );
+                            profile.stats = stats;
+                            Utils.showMiniProfileDialog(profile, context);
+                          } catch (e) {
+                            print("Error loading profile: $e");
+                          }
+                        },
+                        child: CachedCircleAvatar(
+                          imageUrl: profilePicture,
+                          user: Variables.currentUser?.settings,
+                          radius: 10,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            liveName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          // Prevent vertical stretch
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              liveName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.remove_red_eye,
-                                size: 14,
-                                color: Colors.white70,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                "$viewerCount viewers",
-                                style: const TextStyle(
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.remove_red_eye,
+                                  size: 14,
                                   color: Colors.white70,
-                                  fontSize: 12,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                const SizedBox(width: 4),
+                                Text(
+                                  "$viewerCount viewers",
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: _onClosePressed,
-                    ),
-                  ],
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: _onClosePressed,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (showCommentList)
                 Positioned(
                   left: 0,
                   bottom: keyboardHeight + 60,
-                  height: MediaQuery
-                      .of(context)
-                      .size
-                      .height * 0.4,
-                  width: MediaQuery
-                      .of(context)
-                      .size
-                      .width * 0.8,
-                  child: ListView.builder(
-                    reverse: true,
-                    itemCount: comments.length,
-                    itemBuilder: (context, index) {
-                      final c = comments[comments.length - 1 - index];
-                      final userName = c.liveUser.user.name;
-                      final message = c.message;
-                      final userId = c.liveUser.id;
-
-                      return Container(
-                        margin: const EdgeInsets.symmetric(
-                          vertical: 4,
-                          horizontal: 8,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
-                          // customize later
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          // Align top of texts with avatar
-                          children: [
-                            GestureDetector(
-                              onTap: () async {
-                                if (c.liveUser.user.id ==
-                                    SocketService.instance.userId) {
-                                  return;
-                                }
-
-                                UserStats state = await ApiService
-                                    .getApiClient()
-                                    .getUserStats(c.liveUser.user.id);
-                                c.liveUser.user.stats = state;
-
-                                UserProfile profile =
-                                await ApiService.getApiClient()
-                                    .getUserProfile(c.liveUser.user.id);
-                                UserStats states = await ApiService
-                                    .getApiClient()
-                                    .getUserStats(c.liveUser.user.id);
-                                profile.stats = states;
-
-                                _showMiniProfileDialog(profile);
-                              },
-                              child: CachedCircleAvatar(
-                                imageUrl: c.liveUser.user.profilePic,
-                                radius: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    userName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow
-                                        .ellipsis, // Truncate if too long
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    message,
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.volume_off,
-                                    color: Colors.white,
-                                  ),
-                                  onPressed: () => _muteUser(userId),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.remove_circle,
-                                    color: Colors.red,
-                                  ),
-                                  onPressed: () => _kickUser(userId),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                  height: MediaQuery.of(context).size.height * 0.3,
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  child: CommentList(
+                    comments: comments,
+                    isHost: true,
+                    onMuteUser: (s) => _muteUser(s),
+                    onKickUser: (s) => _kickUser(s),
                   ),
                 ),
 
@@ -773,10 +675,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                 Positioned(
                   bottom: keyboardHeight + 60,
                   right: 0,
-                  width: MediaQuery
-                      .of(context)
-                      .size
-                      .width * 0.2,
+                  width: MediaQuery.of(context).size.width * 0.2,
                   child: Container(
                     margin: const EdgeInsets.only(right: 8),
                     padding: const EdgeInsets.symmetric(
@@ -784,7 +683,9 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                       horizontal: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
+                      color: Colors.black.withValues(
+                        alpha: (0.6 * 255).toDouble(),
+                      ),
                       border: Border.all(color: Colors.white70, width: 1.5),
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -816,8 +717,10 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                           onPressed: participants.length < 5
                               ? _inviteParticipant
                               : null,
-                          icon: const Icon(Icons.group_add, color: Colors
-                              .white),
+                          icon: const Icon(
+                            Icons.group_add,
+                            color: Colors.white,
+                          ),
                           tooltip: "Add People",
                         ),
                       ],
@@ -831,7 +734,9 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                 child: Container(
                   color: Colors.black45,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -880,38 +785,6 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
           ],
         ),
       ),
-    );
-  }
-
-  void _showMiniProfileDialog(UserProfile userProfile) {
-    showDialog(
-      context: context,
-      builder: (context) =>
-          MiniUserProfileDialog(
-            userProfile: userProfile,
-            onRelationToggle: () async {
-              try {
-                final newRelation = await Utils.toggleFollowStatus(userProfile);
-                return newRelation;
-              } catch (e) {
-                print(e);
-                return UserRelation(isFollowing: false, isFriend: false);
-              }
-            },
-            onMessage: () {
-              Navigator.of(context).pop();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      ChatPage(
-                        currentUserId: SocketService.instance.userId,
-                        otherUserId: userProfile.id,
-                      ),
-                ),
-              );
-            },
-          ),
     );
   }
 }

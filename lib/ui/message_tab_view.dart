@@ -36,10 +36,21 @@ class _ChatInboxPageState extends State<ChatInboxPage> {
 
     // Register the listener
     SocketService.instance.onChatInbox((inboxList) {
-      setState(() {
-        inbox = inboxList;
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          inbox = inboxList;
+          isLoading = false;
+        });
+      }
+    });
+
+    // Fallback in case socket doesn't return anything
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && isLoading) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     });
   }
   String _formatTime(DateTime time) {
@@ -67,6 +78,9 @@ class _ChatInboxPageState extends State<ChatInboxPage> {
         itemCount: inbox.length,
         itemBuilder: (context, index) {
           final item = inbox[index];
+
+          print("message item: ${item.user.toJson()}");
+
           return InkWell(
             onTap: () {
               Navigator.push(
@@ -88,9 +102,7 @@ class _ChatInboxPageState extends State<ChatInboxPage> {
               ),
               child: Row(
                 children: [
-
-                  CachedCircleAvatar(imageUrl: item.user.profilePic, radius: 25,),
-
+                  CachedCircleAvatar(imageUrl: item.user.profilePic, radius: 25,user: item.user.settings,),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

@@ -8,6 +8,7 @@ class FriendUserModel {
   final String name;
   final String profilePic;
   final bool vipStatus;
+  final Map<String,dynamic> settings;
   final int level;
 
   FriendUserModel({
@@ -16,6 +17,7 @@ class FriendUserModel {
     required this.profilePic,
     required this.vipStatus,
     required this.level,
+    required this. settings
   });
 
   factory FriendUserModel.fromJson(Map<String, dynamic> json) =>

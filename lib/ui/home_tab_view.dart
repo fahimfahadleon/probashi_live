@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:probashi_live/ui/audience_page.dart';
+import 'package:probashi_live/ui/cached_circle_avatar.dart';
+import 'package:probashi_live/ui/cached_network_box_image.dart';
 import 'package:probashi_live/utils/api_service.dart';
 import 'package:probashi_live/utils/socket_service.dart'; // Import your socket service
 import 'package:probashi_live/utils/utils.dart';
@@ -254,13 +256,9 @@ class _HomeTabViewState extends State<HomeTabView>
                                   children: [
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(10),
-                                      child: hostUser?.profilePic != null
-                                          ? Image.network(
-                                              hostUser!.profilePic,
-                                              height: 120,
-                                              width: double.infinity,
-                                              fit: BoxFit.cover,
-                                            )
+                                      child:
+                                      hostUser?.profilePic != null
+                                          ? CachedNetworkImageBox(imageUrl: hostUser!.profilePic,height: 120,)
                                           : Container(
                                               height: 120,
                                               color: Colors.grey,

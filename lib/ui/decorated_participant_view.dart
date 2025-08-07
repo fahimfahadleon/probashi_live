@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:probashi_live/models/live_user.dart';
+import 'package:probashi_live/models/user_profile.dart';
 import 'package:probashi_live/ui/cached_circle_avatar.dart';
 import 'participant_video_widget.dart'; // adjust the import path as needed
 
@@ -9,6 +11,7 @@ class DecoratedParticipantView extends StatefulWidget {
   final VoidCallback onProfileTap;
   final VoidCallback onGiftTap;
   final String overlayText;
+  final UserProfile liveUser;
 
   const DecoratedParticipantView({
     super.key,
@@ -17,6 +20,7 @@ class DecoratedParticipantView extends StatefulWidget {
     required this.onProfileTap,
     required this.onGiftTap,
     required this.overlayText,
+    required this.liveUser,
   });
 
   @override
@@ -64,7 +68,7 @@ class _DecoratedParticipantViewState extends State<DecoratedParticipantView> {
               left: 8,
               child: GestureDetector(
                 onTap: _handleAvatarTap,
-                child: CachedCircleAvatar(imageUrl: widget.avatarUrl,radius: 15,),
+                child: CachedCircleAvatar(imageUrl: widget.avatarUrl,radius: 15, user: widget.liveUser.settings),
               ),
             ),
 

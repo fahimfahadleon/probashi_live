@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:probashi_live/ui/cached_network_box_image.dart';
 
 import '../models/user_card_data.dart';
 
@@ -26,30 +27,8 @@ class UserCard extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    data.imageUrl,
-                    height: 120,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, progress) =>
-                    progress == null
-                        ? child
-                        : Container(
-                      height: 120,
-                      alignment: Alignment.center,
-                      child: const CircularProgressIndicator(),
-                    ),
-                    errorBuilder: (_, __, ___) => Container(
-                      height: 120,
-                      color: Colors.grey,
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.person,
-                        size: 50,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
+                  child:
+                  CachedNetworkImageBox(imageUrl: data.imageUrl,height: 120,),
                 ),
                 if (data.isLive)
                   Positioned(

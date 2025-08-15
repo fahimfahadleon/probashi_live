@@ -43,6 +43,7 @@ class _AudiencePageState extends State<AudiencePage>
 
   String _giftSenderName = ""; // store sender username
   String _giftReceiverName = "";
+  int _giftAmount = 0;
 
   bool showCommentList = true;
   bool showControlsPanel = false;
@@ -136,6 +137,7 @@ class _AudiencePageState extends State<AudiencePage>
         _showGiftAnimation = true;
         _giftSenderName = fromUser.name;
         _giftReceiverName = toUser.name;
+        _giftAmount = gift.price;
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -422,36 +424,51 @@ class _AudiencePageState extends State<AudiencePage>
                                 ),
                               ],
                             ),
-                            child: RichText(
-                              textAlign: TextAlign.center,
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: _giftSenderName,
-                                    style: const TextStyle(
-                                      color: Colors.orangeAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
+                              child: RichText(
+                                textAlign: TextAlign.center,
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: _giftSenderName,
+                                      style: const TextStyle(
+                                        color: Colors.orangeAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
                                     ),
-                                  ),
-                                  const TextSpan(
-                                    text: ' sent a gift to ',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
+                                    const TextSpan(
+                                      text: ' sent a gift to ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                      ),
                                     ),
-                                  ),
-                                  TextSpan(
-                                    text: _giftReceiverName,
-                                    style: const TextStyle(
-                                      color: Colors.lightBlueAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
+                                    TextSpan(
+                                      text: _giftReceiverName,
+                                      style: const TextStyle(
+                                        color: Colors.lightBlueAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                                    const TextSpan(
+                                      text: ' worth ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: '\n$_giftAmount 💎', // second line
+                                      style: const TextStyle(
+                                        color: Colors.yellowAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
                           ),
                         ),
                       ),

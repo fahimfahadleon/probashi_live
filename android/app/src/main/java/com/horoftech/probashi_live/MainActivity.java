@@ -23,22 +23,35 @@ public class MainActivity extends FlutterFragmentActivity {
         GeneratedPluginRegistrant.registerWith(flutterEngine);
 
         // Create the native view instance here manually
-        genericStreamViewInstance = new GenericStreamView(this);
+//        genericStreamViewInstance = new GenericStreamView(this);
 
         // Register factory that returns the existing instance
-        flutterEngine.getPlatformViewsController()
-                .getRegistry()
-                .registerViewFactory("generic_stream_view", new GenericStreamViewFactory(genericStreamViewInstance));
+//        flutterEngine.getPlatformViewsController()
+//                .getRegistry()
+//                .registerViewFactory("generic_stream_view", new GenericStreamViewFactory(genericStreamViewInstance));
 
         // Set up MethodChannel
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL)
                 .setMethodCallHandler((call, result) -> {
-                    if (genericStreamViewInstance == null) {
-                        result.error("NO_VIEW", "GenericStreamView not initialized", null);
-                        return;
-                    }
+//                    if (genericStreamViewInstance == null) {
+//                        result.error("NO_VIEW", "GenericStreamView not initialized", null);
+//                        return;
+//                    }
 
                     switch (call.method) {
+
+                        case "initialize":
+                            if (genericStreamViewInstance == null) {
+                                genericStreamViewInstance = new GenericStreamView(this);
+
+                                // Register factory after initialization
+                                flutterEngine.getPlatformViewsController()
+                                        .getRegistry()
+                                        .registerViewFactory("generic_stream_view",
+                                                new GenericStreamViewFactory(genericStreamViewInstance));
+                            }
+                            result.success(null);
+                            break;
                         case "startPreview":
                             genericStreamViewInstance.startPreview();
                             result.success(null);

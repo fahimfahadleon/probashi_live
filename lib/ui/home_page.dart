@@ -7,11 +7,15 @@ import 'package:probashi_live/ui/shorts_tab_view.dart';
 import 'package:probashi_live/ui/video_tab_view.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/user_profile.dart';
+import '../services/generic_system_service.dart';
 import '../utils/api_service.dart';
+import '../utils/permission_service.dart';
 import '../utils/socket_service.dart';
+import '../utils/utils.dart';
 import '../utils/variables.dart';
 import 'home_tab_view.dart';
 import 'message_tab_view.dart';
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -38,9 +42,21 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    PermissionService.requestPermission(
+      context,
+      onGranted: () {
+        GenericStreamService.initialize();
+      },
+      onDenied: () {
+        Utils.showToast(context, "Permission Denied");
+      },
+    );
     _initSocket();
     WakelockPlus.enable();
   }
+
+
+
 
   Future<void> _initSocket() async {
     final token = await FlutterSecureStorage().read(key: 'access_token');
@@ -77,11 +93,10 @@ class _HomePageState extends State<HomePage> {
             actions: [
               TextButton(
                 onPressed: () {
-                  socketService.acceptInvite(fromUserId: from, userId: to, sessionId: sessionId);
                   Navigator.of(context).pop();
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => ParticipantPage(sessionId: sessionId)),
+                    MaterialPageRoute(builder: (_) => ParticipantPage(from: from, to: to, sessionId: sessionId)),
                   );
                 },
                 child: Text("Join"),

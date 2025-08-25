@@ -25,6 +25,16 @@ class GenericStreamService {
     }
   }
   /// Stop the current RTMP stream
+  static Future<bool> initialize() async {
+    try {
+      final result = await _channel.invokeMethod<String>('initialize');
+      return result == 'stopped';
+    } on PlatformException catch (e) {
+      print('Error stopping stream: ${e.message}');
+      return false;
+    }
+  }
+  /// Stop the current RTMP stream
   static Future<bool> startPreview() async {
     try {
       final result = await _channel.invokeMethod<String>('startPreview');

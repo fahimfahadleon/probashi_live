@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-
+import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -49,6 +49,18 @@ class Utils{
     } catch (e) {
       print('Error toggling follow status: $e');
       return userProfile.relation ?? UserRelation(isFollowing: false, isFriend: false);
+
+    }
+  }
+
+  static requestPermission(BuildContext context) async {
+    // Example: Request multiple permissions at once
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.camera,
+      Permission.microphone,
+    ].request();
+
+    if (statuses[Permission.camera]!.isGranted  && statuses[Permission.microphone]!.isGranted) {
 
     }
   }
@@ -221,3 +233,4 @@ class Utils{
 
 
 }
+

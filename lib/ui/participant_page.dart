@@ -9,6 +9,7 @@ import '../models/gift.dart';
 import '../models/user_profile.dart';
 import '../services/generic_system_service.dart';
 import '../utils/api_service.dart';
+import '../utils/permission_service.dart';
 import '../utils/socket_service.dart';
 import '../utils/utils.dart';
 import '../utils/variables.dart';
@@ -19,8 +20,15 @@ import 'cached_circle_avatar.dart';
 
 class ParticipantPage extends StatefulWidget {
   final String sessionId;
+  final String from;
+  final String to;
 
-  const ParticipantPage({super.key, required this.sessionId});
+  const ParticipantPage({
+    super.key,
+    required this.sessionId,
+    required this.from,
+    required this.to,
+  });
 
   @override
   State<ParticipantPage> createState() => _ParticipantPageState();
@@ -54,120 +62,136 @@ class _ParticipantPageState extends State<ParticipantPage>
   void initState() {
     super.initState();
 
-    _svgaController = SVGAAnimationController(vsync: this);
 
-    SocketService.instance.requestLiveSessionDetails(widget.sessionId);
+    PermissionService.requestPermission(
+      context,
+      onGranted: () {
+        GenericStreamService.initialize();
+        SocketService.instance.acceptInvite(fromUserId: widget.from, userId: widget.to, sessionId: widget.sessionId);
+        _svgaController = SVGAAnimationController(vsync: this);
 
-    SocketService.instance.onGiftReceived((gift1) async {
-      final gift = Gift.fromJson(gift1['gift']);
-      final fromUser = UserProfile.fromJson(gift1['fromUser']);
-      final toUser = UserProfile.fromJson(gift1['toUser']);
+        SocketService.instance.requestLiveSessionDetails(widget.sessionId);
 
-      final url = Variables.BASE_URL + gift.imageUrl;
-      final videoItem = await Utils.getCachedSvga(url);
-      if (!mounted || videoItem == null) return;
+        SocketService.instance.onGiftReceived((gift1) async {
+          final gift = Gift.fromJson(gift1['gift']);
+          final fromUser = UserProfile.fromJson(gift1['fromUser']);
+          final toUser = UserProfile.fromJson(gift1['toUser']);
 
-      setState(() {
-        _svgaController!.videoItem = videoItem;
-        _showGiftAnimation = true;
-        _giftSenderName = fromUser.name;
-        _giftReceiverName = toUser.name;
-      });
+          final url = Variables.BASE_URL + gift.imageUrl;
+          final videoItem = await Utils.getCachedSvga(url);
+          if (!mounted || videoItem == null) return;
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _svgaController!.reset();
-        _svgaController!.repeat(count: 1).whenComplete(() {
-          if (!mounted) return;
-          setState(() => _showGiftAnimation = false);
+          setState(() {
+            _svgaController!.videoItem = videoItem;
+            _showGiftAnimation = true;
+            _giftSenderName = fromUser.name;
+            _giftReceiverName = toUser.name;
+          });
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _svgaController!.reset();
+            _svgaController!.repeat(count: 1).whenComplete(() {
+              if (!mounted) return;
+              setState(() => _showGiftAnimation = false);
+            });
+          });
         });
-      });
-    });
 
-    SocketService.instance.onLiveDetailData((data) {
-      setState(() {
-        session = data;
+        SocketService.instance.onLiveDetailData((data) {
+          setState(() {
+            session = data;
 
-        print("session: ${session.toJson()}");
+            print("session: ${session.toJson()}");
 
-        liveName = session.hosts.first.user.name;
-        profilePicture = session.hosts.first.user.profilePic;
-        isSessionLoaded = true; // mark as ready
-      });
-    });
-    // Typed model callbacks
-    SocketService.instance.onNewComment((comment) {
-      const joinSuffix = "has joined the Live.!@";
-
-      if (comment.message.contains(joinSuffix)) {
-        Utils.handleUserJoined(context, comment.liveUser.user);
-
-        final cleanedMessage = comment.message.replaceAll("!@", "");
-        final modifiedComment = LiveComment(
-          id: comment.id,
-          liveUser: comment.liveUser,
-          message: cleanedMessage,
-          createdAt: comment.createdAt,
-        );
-
-        setState(() {
-          comments.add(modifiedComment);
+            liveName = session.hosts.first.user.name;
+            profilePicture = session.hosts.first.user.profilePic;
+            isSessionLoaded = true; // mark as ready
+          });
         });
-      } else {
-        setState(() {
-          comments.add(comment);
+        // Typed model callbacks
+        SocketService.instance.onNewComment((comment) {
+          const joinSuffix = "has joined the Live.!@";
+
+          if (comment.message.contains(joinSuffix)) {
+            Utils.handleUserJoined(context, comment.liveUser.user);
+
+            final cleanedMessage = comment.message.replaceAll("!@", "");
+            final modifiedComment = LiveComment(
+              id: comment.id,
+              liveUser: comment.liveUser,
+              message: cleanedMessage,
+              createdAt: comment.createdAt,
+            );
+
+            setState(() {
+              comments.add(modifiedComment);
+            });
+          } else {
+            setState(() {
+              comments.add(comment);
+            });
+          }
         });
-      }
-    });
-    SocketService.instance.onParticipantJoined((participant) {});
-    SocketService.instance.onParticipantLeft((participant) {
-      setState(
-        () => participants.removeWhere((p) => p.user.id == participant.user.id),
-      );
-    });
+        SocketService.instance.onParticipantJoined((participant) {});
+        SocketService.instance.onParticipantLeft((participant) {
+          setState(
+                () => participants.removeWhere((p) => p.user.id == participant.user.id),
+          );
+        });
 
-    SocketService.instance.onAudienceJoined((audienceUser) {
-      setState(() {
-        viewerCount++;
-        // Optionally store them somewhere or show UI
-      });
-    });
-    SocketService.instance.onAudienceLeft((callback) {
-      setState(() {
-        viewerCount--;
-        // Optionally store them somewhere or show UI
-      });
-    });
+        SocketService.instance.onAudienceJoined((audienceUser) {
+          setState(() {
+            viewerCount++;
+            // Optionally store them somewhere or show UI
+          });
+        });
+        SocketService.instance.onAudienceLeft((callback) {
+          setState(() {
+            viewerCount--;
+            // Optionally store them somewhere or show UI
+          });
+        });
 
-    SocketService.instance.onSessionUpdated((updatedSession) {
-      session = updatedSession;
-      print("session2: ${session.toJson()}");
-      setState(() {
-        participants = Utils.addLiveUsersWithoutDuplicates(
-          participants,
-          session.participants,
-        );
-      });
-    });
+        SocketService.instance.onSessionUpdated((updatedSession) {
+          session = updatedSession;
+          print("session2: ${session.toJson()}");
+          setState(() {
+            participants = Utils.addLiveUsersWithoutDuplicates(
+              participants,
+              session.participants,
+            );
+          });
+        });
 
-    SocketService.instance.onLiveEnded((sessionData) {
-      if (mounted) {
-        GenericStreamService.stopStream();
-        Utils.showToast(context, "Live ended");
+        SocketService.instance.onLiveEnded((sessionData) {
+          if (mounted) {
+            GenericStreamService.stopStream();
+            Utils.showToast(context, "Live ended");
+            Navigator.pop(context);
+          }
+        });
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _startStreamAutomatically();
+        });
+
+        SocketService.instance.onParticipantLiveStarted((data) {
+          setState(() {
+            session = data;
+            liveName = session.hosts.first.user.name;
+            profilePicture = session.hosts.first.user.profilePic;
+          });
+        });
+
+      },
+      onDenied: () {
+        SocketService.instance.cancelInvite(fromUserId: widget.from, toUserId:widget.to, sessionId: widget.sessionId);
+        Utils.showToast(context, "Permission Denied");
         Navigator.pop(context);
-      }
-    });
+      },
+    );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startStreamAutomatically();
-    });
 
-    SocketService.instance.onParticipantLiveStarted((data) {
-      setState(() {
-        session = data;
-        liveName = session.hosts.first.user.name;
-        profilePicture = session.hosts.first.user.profilePic;
-      });
-    });
   }
 
   void _startStreamAutomatically() {

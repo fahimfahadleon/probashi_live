@@ -13,6 +13,7 @@ import '../models/gift.dart';
 import '../models/user_profile.dart';
 import '../services/generic_system_service.dart';
 import '../utils/api_service.dart';
+import '../utils/permission_service.dart';
 import '../utils/socket_service.dart';
 import '../utils/utils.dart';
 import '../utils/variables.dart';
@@ -55,120 +56,135 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    _svgaController = SVGAAnimationController(vsync: this);
 
-    SocketService.instance.onGiftReceived((gift1) async {
-      final gift = Gift.fromJson(gift1['gift']);
-      final fromUser = UserProfile.fromJson(gift1['fromUser']);
-      final toUser = UserProfile.fromJson(gift1['toUser']);
+    PermissionService.requestPermission(
+      context,
+      onGranted: () {
 
-      final url = Variables.BASE_URL + gift.imageUrl;
-      final videoItem = await Utils.getCachedSvga(url);
-      if (!mounted || videoItem == null) return;
+        GenericStreamService.initialize();
 
-      setState(() {
-        _svgaController!.videoItem = videoItem;
-        _showGiftAnimation = true;
-        _giftSenderName = fromUser.name;
-        _giftReceiverName = toUser.name;
-      });
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _svgaController!.reset();
-        _svgaController!.repeat(count: 1).whenComplete(() {
-          if (!mounted) return;
-          setState(() => _showGiftAnimation = false);
+        _svgaController = SVGAAnimationController(vsync: this);
+
+        SocketService.instance.onGiftReceived((gift1) async {
+          final gift = Gift.fromJson(gift1['gift']);
+          final fromUser = UserProfile.fromJson(gift1['fromUser']);
+          final toUser = UserProfile.fromJson(gift1['toUser']);
+
+          final url = Variables.BASE_URL + gift.imageUrl;
+          final videoItem = await Utils.getCachedSvga(url);
+          if (!mounted || videoItem == null) return;
+
+          setState(() {
+            _svgaController!.videoItem = videoItem;
+            _showGiftAnimation = true;
+            _giftSenderName = fromUser.name;
+            _giftReceiverName = toUser.name;
+          });
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _svgaController!.reset();
+            _svgaController!.repeat(count: 1).whenComplete(() {
+              if (!mounted) return;
+              setState(() => _showGiftAnimation = false);
+            });
+          });
         });
-      });
-    });
 
-    // Typed model callbacks
-    SocketService.instance.onNewComment((comment) {
-      const joinSuffix = "has joined the Live.!@";
+        // Typed model callbacks
+        SocketService.instance.onNewComment((comment) {
+          const joinSuffix = "has joined the Live.!@";
 
-      if (comment.message.contains(joinSuffix)) {
-        Utils.handleUserJoined(context, comment.liveUser.user);
+          if (comment.message.contains(joinSuffix)) {
+            Utils.handleUserJoined(context, comment.liveUser.user);
 
-        final cleanedMessage = comment.message.replaceAll("!@", "");
-        final modifiedComment = LiveComment(
-          id: comment.id,
-          liveUser: comment.liveUser,
-          message: cleanedMessage,
-          createdAt: comment.createdAt,
-        );
+            final cleanedMessage = comment.message.replaceAll("!@", "");
+            final modifiedComment = LiveComment(
+              id: comment.id,
+              liveUser: comment.liveUser,
+              message: cleanedMessage,
+              createdAt: comment.createdAt,
+            );
 
-        setState(() {
-          comments.add(modifiedComment);
+            setState(() {
+              comments.add(modifiedComment);
+            });
+          } else {
+            setState(() {
+              comments.add(comment);
+            });
+          }
         });
-      } else {
-        setState(() {
-          comments.add(comment);
+        SocketService.instance.onParticipantJoined((participant) {
+          // setState(() => participants.add(participant));
         });
-      }
-    });
-    SocketService.instance.onParticipantJoined((participant) {
-      // setState(() => participants.add(participant));
-    });
-    SocketService.instance.onParticipantLeft((participant) {
-      setState(() {
-        participants.removeWhere((p) => p.user.id == participant.user.id);
-      });
-    });
-
-    SocketService.instance.onAudienceJoined((audienceUser) {
-      setState(() {
-        viewerCount++;
-        // Optionally store them somewhere or show UI
-      });
-    });
-    SocketService.instance.onAudienceLeft((callback) {
-      setState(() {
-        viewerCount--;
-        // Optionally store them somewhere or show UI
-      });
-    });
-
-    SocketService.instance.onSessionUpdated((updatedSession) {
-      final updated = updatedSession.participants;
-
-      // Check if participant list actually changed
-      final isSameLength = participants.length == updated.length;
-      final isSameContent =
-          isSameLength &&
-          participants.every((p) => updated.any((u) => u.user.id == p.user.id));
-
-      if (!isSameLength || !isSameContent) {
-        setState(() {
-          participants
-            ..clear()
-            ..addAll(updated);
+        SocketService.instance.onParticipantLeft((participant) {
+          setState(() {
+            participants.removeWhere((p) => p.user.id == participant.user.id);
+          });
         });
-      }
-      session = updatedSession;
-    });
 
-    SocketService.instance.onLiveEnded((sessionData) {
-      if (mounted) {
-        GenericStreamService.stopStream();
-      }
-    });
+        SocketService.instance.onAudienceJoined((audienceUser) {
+          setState(() {
+            viewerCount++;
+            // Optionally store them somewhere or show UI
+          });
+        });
+        SocketService.instance.onAudienceLeft((callback) {
+          setState(() {
+            viewerCount--;
+            // Optionally store them somewhere or show UI
+          });
+        });
 
-    SocketService.instance.onLiveStarted((sessionData) {
-      setState(() {
-        session = sessionData;
-        liveName = sessionData.hosts.first.user.name;
-        profilePicture = sessionData.hosts.first.user.profilePic;
-      });
-    });
+        SocketService.instance.onSessionUpdated((updatedSession) {
+          final updated = updatedSession.participants;
 
-    SocketService.instance.onFriendListCalled((friendList) {
-      showFriendInviteDialog(context, friendList);
-    });
+          // Check if participant list actually changed
+          final isSameLength = participants.length == updated.length;
+          final isSameContent =
+              isSameLength &&
+                  participants.every((p) => updated.any((u) => u.user.id == p.user.id));
 
-    SocketService.instance.onInviteAccepted((data) {});
-    SocketService.instance.onInviteCanceled((data) {
-      Utils.showToast(context, "Invite canceled");
-    });
+          if (!isSameLength || !isSameContent) {
+            setState(() {
+              participants
+                ..clear()
+                ..addAll(updated);
+            });
+          }
+          session = updatedSession;
+        });
+
+        SocketService.instance.onLiveEnded((sessionData) {
+          if (mounted) {
+            GenericStreamService.stopStream();
+          }
+        });
+
+        SocketService.instance.onLiveStarted((sessionData) {
+          setState(() {
+            session = sessionData;
+            liveName = sessionData.hosts.first.user.name;
+            profilePicture = sessionData.hosts.first.user.profilePic;
+          });
+        });
+
+        SocketService.instance.onFriendListCalled((friendList) {
+          showFriendInviteDialog(context, friendList);
+        });
+
+        SocketService.instance.onInviteAccepted((data) {});
+        SocketService.instance.onInviteCanceled((data) {
+          Utils.showToast(context, "Invite canceled");
+        });
+      },
+      onDenied: () {
+        Utils.showToast(context, "Permission Denied");
+        Navigator.pop(context);
+      },
+    );
+
   }
 
   void showFriendInviteDialog(

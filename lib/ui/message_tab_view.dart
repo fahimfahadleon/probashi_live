@@ -15,11 +15,27 @@ class ChatInboxPage extends StatefulWidget {
 class _ChatInboxPageState extends State<ChatInboxPage> {
   List<ChatInboxEntry> inbox = [];
   bool isLoading = true;
+  bool _hasLoaded = false;
 
   @override
   void initState() {
     super.initState();
+    SocketService.instance.off("chat_inbox");
     _loadInbox();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Refresh profile each time this tab becomes visible again
+    if (!_hasLoaded) {
+      _hasLoaded = true; // prevent double call on initial mount
+    } else {
+      // refresh user data
+      _loadInbox();
+      setState(() {}); // triggers rebuild
+    }
   }
 
   @override
@@ -31,10 +47,8 @@ class _ChatInboxPageState extends State<ChatInboxPage> {
   void _loadInbox() {
     setState(() => isLoading = true);
 
-    // Request the inbox data
     SocketService.instance.getChatInbox();
 
-    // Register the listener
     SocketService.instance.onChatInbox((inboxList) {
       if (mounted) {
         setState(() {
@@ -44,15 +58,14 @@ class _ChatInboxPageState extends State<ChatInboxPage> {
       }
     });
 
-    // Fallback in case socket doesn't return anything
+    // fallback if no response
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted && isLoading) {
-        setState(() {
-          isLoading = false;
-        });
+        setState(() => isLoading = false);
       }
     });
   }
+
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     if (now.difference(time).inDays == 0) {
@@ -66,75 +79,91 @@ class _ChatInboxPageState extends State<ChatInboxPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chats',style: TextStyle(color: Colors.white),),
+        title: const Text('Chats', style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.purple.shade900.withOpacity(0.9),
         centerTitle: true,
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : inbox.isEmpty
-          ? const Center(child: Text("No conversations yet."))
-          : ListView.builder(
-        itemCount: inbox.length,
-        itemBuilder: (context, index) {
-          final item = inbox[index];
-
-          print("message item: ${item.user.toJson()}");
-
-          return InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChatPage(currentUserId: SocketService.instance.userId, otherUserId: item.user.id),
-                ),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                gradient: LinearGradient(
-                  colors: [Color(0xFFDCB3FF), Color(0xFFB3E5FC)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-              child: Row(
-                children: [
-                  CachedCircleAvatar(imageUrl: item.user.profilePic, radius: 25,user: item.user.settings,),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.user.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.latestMessage,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.grey[700],
-                            fontSize: 14,
+      body: RefreshIndicator(
+        onRefresh: () async => _loadInbox(),
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : inbox.isEmpty
+            ? const Center(child: Text("No conversations yet."))
+            : ListView.builder(
+                itemCount: inbox.length,
+                itemBuilder: (context, index) {
+                  final item = inbox[index];
+                  return InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatPage(
+                            currentUserId: SocketService.instance.userId,
+                            otherUserId: item.user.id,
                           ),
                         ),
-                      ],
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFDCB3FF), Color(0xFFB3E5FC)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          CachedCircleAvatar(
+                            imageUrl: item.user.profilePic,
+                            radius: 25,
+                            user: item.user.settings,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.user.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  item.latestMessage,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatTime(item.createdAt),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _formatTime(item.createdAt),
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ],
+                  );
+                },
               ),
-            ),
-          );
-        },
       ),
     );
   }

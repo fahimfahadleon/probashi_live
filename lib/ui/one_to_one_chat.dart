@@ -41,8 +41,9 @@ class _ChatPageState extends State<ChatPage> {
     fetchProfile();
 
     // Register callback for chat history socket event
-    SocketService.instance.onChatHistory(_onChatHistoryReceived);
 
+    SocketService.instance.onChatHistory(_onChatHistoryReceived);
+     // SocketService.instance.off('chat_history');
     fetchMessages();
 
     _scrollController.addListener(() {
@@ -53,7 +54,10 @@ class _ChatPageState extends State<ChatPage> {
     });
     SocketService.instance.onNewMessage((message){
       setState(() {
-        messages.add(message);
+        if(message.senderId == widget.otherUserId || message.receiverId == widget.otherUserId){
+          messages.add(message);
+        }
+
       });
     });
   }
@@ -61,7 +65,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     // Remove chat history listener on dispose
-    SocketService.instance.off('chat_history');
+    // SocketService.instance.off('chat_history');
     _scrollController.dispose();
     _textController.dispose();
     super.dispose();
@@ -103,15 +107,6 @@ class _ChatPageState extends State<ChatPage> {
   void sendMessage() {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-
-    final newMessage = ChatMessage(
-      id: DateTime.now().toIso8601String(),
-      senderId: widget.currentUserId,
-      receiverId: widget.otherUserId,
-      content: text,
-      createdAt: DateTime.now(),
-    );
-
     setState(() {
       _textController.clear();
     });
@@ -128,7 +123,7 @@ class _ChatPageState extends State<ChatPage> {
     final avatar = isMine
         ? currentUserProfile.profilePic
         : otherUserProfile.profilePic;
-    final user = isMine ? currentUserProfile : otherUserProfile;
+
 
     return Row(
       mainAxisAlignment: isMine
@@ -137,17 +132,15 @@ class _ChatPageState extends State<ChatPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!isMine) ...[
-          const SizedBox(width: 8),
-          userAvatar(avatar,user),
-          const SizedBox(width: 6),
+          userAvatar(avatar,{}),
         ],
         Flexible(
           child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 6),
+            margin: const EdgeInsets.symmetric(vertical: 4),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: isMine ? Colors.teal.shade300 : Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.teal.shade100, width: 1),
             ),
             child: Text(
@@ -160,9 +153,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
         if (isMine) ...[
-          const SizedBox(width: 6),
-          userAvatar(avatar,user),
-          const SizedBox(width: 8),
+          userAvatar(avatar,{}),
         ],
       ],
     );
@@ -170,6 +161,7 @@ class _ChatPageState extends State<ChatPage> {
 
   Widget buildInputArea() {
     return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -225,11 +217,11 @@ class _ChatPageState extends State<ChatPage> {
       return Scaffold(
         backgroundColor: Colors.teal.shade50,
         appBar: AppBar(
+          titleSpacing: 0,
           backgroundColor: Colors.teal,
           title: Row(
             children: [
-              userAvatar(otherUserProfile.profilePic,otherUserProfile),
-              const SizedBox(width: 10),
+              userAvatar(otherUserProfile.profilePic,otherUserProfile.settings),
               Text(
                 otherUserProfile.name,
                 style: const TextStyle(color: Colors.white),
@@ -242,20 +234,20 @@ class _ChatPageState extends State<ChatPage> {
             Expanded(
               child: messages.isEmpty && !isLoadingMore
                   ? const Center(
-                      child: Text(
-                        "No chat history available",
-                        style: TextStyle(color: Colors.black54),
-                      ),
-                    )
+                child: Text(
+                  "No chat history available",
+                  style: TextStyle(color: Colors.black54),
+                ),
+              )
                   : ListView.builder(
-                      reverse: true,
-                      controller: _scrollController,
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final reversedIndex = messages.length - 1 - index;
-                        return buildMessageBubble(messages[reversedIndex]);
-                      },
-                    ),
+                reverse: true,
+                controller: _scrollController,
+                itemCount: messages.length,
+                itemBuilder: (context, index) {
+                  final reversedIndex = messages.length - 1 - index;
+                  return buildMessageBubble(messages[reversedIndex]);
+                },
+              ),
             ),
             buildInputArea(),
           ],
@@ -264,7 +256,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Widget userAvatar(String? imageUrl, UserProfile userProfile) {
-    return CachedCircleAvatar(imageUrl: imageUrl,user: userProfile.settings,);
+  Widget userAvatar(String? imageUrl, Map<String,dynamic>? userProfile) {
+    return CachedCircleAvatar(imageUrl: imageUrl,user: userProfile,radius: 15,);
   }
 }

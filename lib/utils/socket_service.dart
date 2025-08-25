@@ -228,10 +228,6 @@ class SocketService {
       final List<ChatInboxEntry> inbox = (data as List)
           .map((entry) => ChatInboxEntry.fromJson(entry))
           .toList();
-      for(ChatInboxEntry i in inbox){
-        print("chatInbox: ${i.toJson()}");
-      }
-
       callback(inbox); // ✅ Call the callback with typed list
     });
   }

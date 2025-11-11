@@ -16,11 +16,28 @@ class _ParticipantVideoWidgetState extends State<ParticipantVideoWidget> {
   @override
   void initState() {
     super.initState();
+
+
+
+    final options = [
+      '--no-drop-late-frames',
+      '--no-skip-frames',
+      '--network-caching=20',  // try 50–150 ms
+      '--live-caching=20',     // same here
+      '--clock-jitter=0',
+      '--clock-synchro=0',
+      '--no-audio-time-stretch',
+    ];
+
+
+
     _controller = VlcPlayerController.network(
       widget.streamUrl,
       hwAcc: HwAcc.full,
       autoPlay: true,
-      options: VlcPlayerOptions(),
+      options: VlcPlayerOptions(
+        advanced: VlcAdvancedOptions(options)
+      ),
     );
   }
 

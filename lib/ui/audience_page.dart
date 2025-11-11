@@ -155,6 +155,8 @@ class _AudiencePageState extends State<AudiencePage>
     SocketService.instance.leaveLive();
     _chatController.dispose();
     _svgaController?.dispose();
+    participants.clear();
+    viewerCount = 0;
     super.dispose();
   }
 
@@ -348,31 +350,59 @@ class _AudiencePageState extends State<AudiencePage>
                       mainAxisSize: MainAxisSize.min, // ensures vertical shrink-wrap
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.liveSession.hosts.first.user.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(
-                              Icons.remove_red_eye,
-                              size: 14,
-                              color: Colors.white70,
-                            ),
-                            const SizedBox(width: 4),
                             Text(
-                              "$viewerCount viewers",
+                              widget.liveSession.hosts.first.user.name,
                               style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
                               ),
                             ),
+                            const SizedBox(width: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.remove_red_eye,
+                                  size: 14,
+                                  color: Colors.white70,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  "$viewerCount viewers",
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
+                        ),
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: (){
+                            Utils.copyToClipboard(widget.liveSession.hosts.first.user.id);
+                            Utils.showToast(context, "Id Copied!");
+                          },
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.note,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                widget.liveSession.hosts.first.user.id,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -509,12 +539,14 @@ class _AudiencePageState extends State<AudiencePage>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      onPressed: () {}, // Add gift logic here
+                      onPressed: () {
+                        SocketService.instance.requestToJoin(SocketService.instance.userId,widget.hostUserId);
+                      }, // Add gift logic here
                       icon: const Icon(
-                        Icons.card_giftcard,
+                        Icons.join_full,
                         color: Colors.white,
                       ),
-                      tooltip: "Send Gift",
+                      tooltip: "Request to join",
                     ),
                   ],
                 ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:probashi_live/models/create_payment_dto.dart';
+import 'package:probashi_live/models/gateway_model.dart';
+import 'package:probashi_live/models/settings_model.dart';
 import 'package:probashi_live/utils/api_service.dart';
 
 import '../models/vip_diamond_pack.dart';
@@ -15,14 +17,27 @@ class TopUpView extends StatefulWidget {
 
 class _TopUpViewState extends State<TopUpView> {
   List<VIPDiamondPack> _packs = [];
+  late Settings settings;
   bool _loading = true;
+  late List<Gateway> gateways;
 
   @override
   void initState() {
     super.initState();
+    _fetchSettings();
     _fetchPacks();
   }
 
+
+  Future<void> _fetchSettings() async {
+    try {
+      settings = await ApiService.getApiClient().getSettings();
+      gateways = settings.gateways!;
+
+    } catch (e) {
+      debugPrint('Failed to fetch settings: $e');
+    }
+  }
   Future<void> _fetchPacks() async {
     try {
       final packs = await ApiService.getApiClient().getDiamondPacks();
@@ -82,6 +97,7 @@ class _TopUpViewState extends State<TopUpView> {
     final txnIdController = TextEditingController();
     final methodController = TextEditingController();
     final descController = TextEditingController();
+    var selectedIndex = 0;
 
     bool isLoading = false;
 
@@ -95,7 +111,34 @@ class _TopUpViewState extends State<TopUpView> {
               vertical: 0,
               horizontal: 16,
             ),
-            title: Text('Buy ${pack.diamonds} 💎 for \$${pack.price}'),
+            title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Buy ${pack.diamonds} 💎 for \$${pack.price.toStringAsFixed(2)}'),
+              SizedBox(height: 16),
+              DropdownButton<int>(
+                value: selectedIndex,
+                items: List.generate(gateways.length, (index) {
+                  final g = gateways[index];
+                  return DropdownMenuItem<int>(
+                    value: index,
+                    child: Text('${g.phone} (${g.provider})'),
+                  );
+                }),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      selectedIndex = value;
+                      final g = gateways[value];
+                      Utils.copyToClipboard(g.phone);
+                      Utils.showToast(context, "Phone Number Copied!");
+                    });
+                  }
+                },
+                isExpanded: true,
+              ),
+            ],
+          ),
             content: SizedBox(
               width: MediaQuery
                   .of(context)
@@ -171,6 +214,8 @@ class _TopUpViewState extends State<TopUpView> {
       },
     );
   }
+
+
 
 
 }

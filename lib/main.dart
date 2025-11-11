@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:probashi_live/ui/home_page.dart';
 import 'package:probashi_live/ui/social_login_page.dart';
+import 'package:probashi_live/utils/utils.dart';
 
 void main() {
   initGoogleSignIn();
@@ -15,7 +16,6 @@ class MyApp extends StatelessWidget {
   Future<bool> checkLogin() async {
     final storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
-
     return token != null && token.isNotEmpty;
   }
 
@@ -37,16 +37,54 @@ class MyApp extends StatelessWidget {
           }
 
           final isLoggedIn = snapshot.data!;
-          return isLoggedIn ? const HomePage() : const SocialLoginPage();
+          return isLoggedIn
+              ? const DoubleBackToExit(child: HomePage())
+              : const SocialLoginPage();
         },
       ),
     );
   }
 }
+
+/// ✅ Updated for Flutter 3.12+: Uses PopScope instead of WillPopScope
+class DoubleBackToExit extends StatefulWidget {
+  final Widget child;
+  const DoubleBackToExit({super.key, required this.child});
+
+  @override
+  State<DoubleBackToExit> createState() => _DoubleBackToExitState();
+}
+
+class _DoubleBackToExitState extends State<DoubleBackToExit> {
+  DateTime? lastPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false, // prevents automatic popping
+      onPopInvokedWithResult: (didPop, result) {
+        // If already popped, ignore
+        if (didPop) return;
+
+        final now = DateTime.now();
+        if (lastPressed == null ||
+            now.difference(lastPressed!) > const Duration(seconds: 2)) {
+          lastPressed = now;
+          Utils.showToast(context,'Press back again to exit');
+          return;
+        }
+
+        // Exit app manually
+        Navigator.of(context).maybePop();
+      },
+      child: widget.child,
+    );
+  }
+}
 Future<void> initGoogleSignIn() async {
   await GoogleSignIn.instance.initialize(
-    clientId: '760404179157-q70boclprl7dm94htpka652cnl612ssq.apps.googleusercontent.com', // For native sign-in
-    serverClientId: '760404179157-n7akn310nvm9h100he7kikkj09d2ad72.apps.googleusercontent.com', // For ID token (backend)
+    clientId: '760404179157-q70boclprl7dm94htpka652cnl612ssq.apps.googleusercontent.com',
+    serverClientId: '760404179157-n7akn310nvm9h100he7kikkj09d2ad72.apps.googleusercontent.com',
   );
 }
 

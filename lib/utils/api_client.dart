@@ -10,6 +10,7 @@ import '../models/gift_category.dart';
 import '../models/login_response.dart';
 import '../models/offer.dart';
 import '../models/parchase_collection.dart';
+import '../models/settings_model.dart';
 import '../models/user_profile.dart';
 import '../models/vip_diamond_pack.dart';
 
@@ -50,32 +51,37 @@ abstract class ApiClient {
   @GET("/offer/get-all")
   Future<List<Offer>> getOffers();
 
-
+//used
   @POST("/friends/follow/{userId}")
   Future<void> followUser(@Path("userId") String userId);
 
+  //used
   @DELETE("/friends/unfollow/{userId}")
   Future<void> unfollowUser(@Path("userId") String userId);
 
-
+//used
   @GET("/gifts/by-category")
   Future<List<Category>> getAllCategoriesWithGifts();
 
+  //used
   @GET("/collections/by-category")
   Future<List<CollectionsCategory>> getAllCategoriesWithCollections();
-
+//used
   @POST("/collections/purchase")
   Future<UserProfile> purchaseCollection(
       @Body() PurchaseCollectionRequest body,);
-
+//used
   @POST('/collections/by-name')
   Future<String> getCollectionSvgaByName(@Body() CollectionNameRequest request);
 
-
+//used
   @PATCH('/profile/settings')
   Future<UserProfile> updateUserSettings({
     @Body() required Map<String, dynamic> settings,
   });
+
+  @GET("/settings/get-settings")
+  Future<Settings> getSettings();
 
 
 

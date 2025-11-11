@@ -1,6 +1,8 @@
 
 
 
+import 'package:probashi_live/models/join_request_accepted.dart';
+import 'package:probashi_live/models/user_profile.dart';
 import 'package:probashi_live/utils/utils.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:probashi_live/utils/variables.dart';
@@ -88,10 +90,6 @@ class SocketService {
 
   /// Leave the current live session
   void leaveLive() {
-    if (userId.isEmpty || currentSessionId == null) {
-      print("Cannot leave live: userId or sessionId missing");
-      return;
-    }
     socket.emit(LEAVE_LIVE, {USER_ID: userId, 'sessionId': currentSessionId});
     currentSessionId = null;
     _cachedLiveSession = null;
@@ -100,6 +98,7 @@ class SocketService {
   /// Send a comment to the current live session
   void sendComment(String message) {
     if (userId.isEmpty || currentSessionId == null) {
+      print('userId: $userId, sessionId: $currentSessionId');
       print("Cannot send comment: userId or sessionId missing");
       return;
     }
@@ -263,6 +262,7 @@ class SocketService {
   void Function(LiveUser participant)? _participantJoinedCallback;
   void Function(LiveUser participant)? _participantLeftCallback;
   void Function(Map<String, dynamic> audience)? _audienceJoinedCallback;
+  void Function(UserProfile userProfile)? _audienceRequestedCallback;
   void Function(Map<String, dynamic> audience)? _audienceLeftCallback;
   void Function(Map<String, dynamic> audience)? _giftReceivedCallback;
   void Function(ChatMessage message)? _newMessageCallback;
@@ -276,8 +276,12 @@ class SocketService {
   void Function(List<FriendUserModel>)? _friendsListCallback;
   void Function(LiveSession)? _participantLiveStartedCallback;
   void Function(LiveSession)? _getLiveDetails;
+  void Function(JoinRequestAccepted)? _onInvitationAccepted;
   void onLiveDetailData(void Function(LiveSession) callback) {
     _getLiveDetails = callback;
+  }
+  void onInvitationAcceptedCallback(void Function(JoinRequestAccepted)callback){
+    _onInvitationAccepted = callback;
   }
 
   void onParticipantLiveStarted(void Function(LiveSession) callback) {
@@ -328,6 +332,9 @@ class SocketService {
 
   void onAudienceJoined(void Function(Map<String, dynamic> audience) callback) {
     _audienceJoinedCallback = callback;
+  }
+  void onAudienceRequested(void Function(UserProfile profile) callback) {
+    _audienceRequestedCallback = callback;
   }
 
   void onAudienceLeft(void Function(Map<String, dynamic> audience) callback) {
@@ -472,10 +479,19 @@ class SocketService {
         print("Error parsing active live sessions: $e");
       }
     });
+    socket.on('audience_request_received', (data){
+      UserProfile profile = UserProfile.fromJson(data);
+      _audienceRequestedCallback?.call(profile);
+    });
 
     socket.on('disconnect', (_) {
       print('Socket disconnected');
       isConnected = false;
+    });
+
+    socket.on('join_request_accepted', (payload){
+      print('join request accepted data: $payload');
+      _onInvitationAccepted?.call(JoinRequestAccepted.fromJson(payload));
     });
 
     socket.on('connect_error', (error) {
@@ -513,5 +529,19 @@ class SocketService {
       return;
     }
     socket.emit('participant_left', {USER_ID: userId, 'sessionId': currentSessionId});
+  }
+
+  void requestToJoin(String senderId,String receiverId) {
+    if (userId.isEmpty || currentSessionId == null) {
+      return;
+    }
+    socket.emit('join_request', {USER_ID: senderId, 'sessionId': currentSessionId, 'senderId': senderId, 'receiverId': receiverId});
+  }
+
+  void joinRequestAccepted(UserProfile user) {
+    if (userId.isEmpty || currentSessionId == null) {
+      return;
+    }
+    socket.emit('join_request_accepted',{'userId': user.id, 'sessionId': currentSessionId, 'fromUser': userId});
   }
 }

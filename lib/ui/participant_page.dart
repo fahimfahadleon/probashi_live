@@ -81,6 +81,7 @@ class _ParticipantPageState extends State<ParticipantPage>
           final videoItem = await Utils.getCachedSvga(url);
           if (!mounted || videoItem == null) return;
 
+
           setState(() {
             _svgaController!.videoItem = videoItem;
             _showGiftAnimation = true;
@@ -354,6 +355,9 @@ class _ParticipantPageState extends State<ParticipantPage>
   void dispose() {
     _svgaController?.dispose();
     _chatController.dispose();
+    participants.clear();
+    viewerCount = 0;
+
     if (isStreaming) {
       GenericStreamService.stopStream();
       // SocketService.instance.leaveLive();
@@ -633,14 +637,14 @@ class _ParticipantPageState extends State<ParticipantPage>
                       ),
                     ),
 
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          addParticipant();
-                        });
-                      },
-                      icon: Icon(Icons.add, color: Colors.white),
-                    ),
+                    // IconButton(
+                    //   onPressed: () {
+                    //     setState(() {
+                    //       addParticipant();
+                    //     });
+                    //   },
+                    //   icon: Icon(Icons.add, color: Colors.white),
+                    // ),
 
                     IconButton(
                       onPressed: _toggleControlsPanel,

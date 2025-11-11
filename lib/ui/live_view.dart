@@ -37,12 +37,16 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   bool _dialogShown = false;
   bool showControlsPanel = false;
   bool showCommentList = true;
+  bool hasNotification = false;
+  bool hasNotification1 = false;
   late LiveSession session;
+  bool isBeautyEnabled = false;
   late String liveName = "default name";
 
   final TextEditingController _chatController = TextEditingController();
   final List<LiveComment> comments = [];
   final List<LiveUser> participants = [];
+  final List<UserProfile> users = [];
   int viewerCount = 0;
   late String profilePicture =
       "https://api.dicebear.com/7.x/identicon/png?seed=default";
@@ -174,6 +178,19 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
           showFriendInviteDialog(context, friendList);
         });
 
+        SocketService.instance.onAudienceRequested((data){
+          final exists = users.any((user) => user.id == data.id);
+          if (!exists) {
+            users.add(data);
+            setState(() {
+              hasNotification = true;
+              hasNotification1 = true;
+            });
+          }
+        });
+
+
+
         SocketService.instance.onInviteAccepted((data) {});
         SocketService.instance.onInviteCanceled((data) {
           Utils.showToast(context, "Invite canceled");
@@ -291,7 +308,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     if (confirm == true) {
       final rtmpUrl = "${Variables.RTMP_URL}/${SocketService.instance.userId}";
       GenericStreamService.startStream(rtmpUrl);
-      GenericStreamService.switchCamera();
+      // GenericStreamService.switchCamera();
       SocketService.instance.goLive();
       setState(() => isStreaming = true);
     } else {
@@ -350,6 +367,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
 
   void _toggleCamera() {
     isCameraOn = !isCameraOn;
+    GenericStreamService.toggleCamera();
     setState(() {});
   }
 
@@ -490,12 +508,124 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   void dispose() {
     _svgaController?.dispose();
     _chatController.dispose();
+    participants.clear();
+    viewerCount = 0;
     if (isStreaming) {
       GenericStreamService.stopStream();
       SocketService.instance.leaveLive();
     }
     super.dispose();
   }
+
+
+  void showRequestsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Title
+                const Text(
+                  "User Requests",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // User list
+                SizedBox(
+                  width: double.maxFinite,
+                  height: 300,
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: users.length,
+                    separatorBuilder: (_, __) => const Divider(height: 6),
+                    itemBuilder: (context, index) {
+                      final user = users[index];
+                      return ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        leading: CachedCircleAvatar(
+                          imageUrl: user.profilePic,
+                          radius: 16,
+                          user: user.settings,
+                        ),
+                        title: Text(
+                          user.name,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Row(
+                          children: [
+                            const Icon(Icons.diamond, size: 12, color: Colors.blue),
+                            const SizedBox(width: 4),
+                            Text("${user.diamond}", style: const TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              iconSize: 20,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.check_circle, color: Colors.green),
+                              onPressed: () {
+
+                                users.remove(user);
+                                SocketService.instance.joinRequestAccepted(user);
+
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text("Accepted ${user.name}")),
+                                );
+                              },
+                            ),
+
+                            IconButton(
+                              iconSize: 20,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text("Deleted ${user.name}")),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+                // Close button
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Close"),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -729,16 +859,56 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                             color: Colors.white,
                           ),
                         ),
+                        // IconButton(
+                        //   onPressed: participants.length < 5
+                        //       ? _inviteParticipant
+                        //       : null,
+                        //   icon: const Icon(
+                        //     Icons.group_add,
+                        //     color: Colors.white,
+                        //   ),
+                        //   tooltip: "Add People",
+                        // ),
                         IconButton(
-                          onPressed: participants.length < 5
-                              ? _inviteParticipant
-                              : null,
-                          icon: const Icon(
-                            Icons.group_add,
-                            color: Colors.white,
-                          ),
-                          tooltip: "Add People",
-                        ),
+                            onPressed: (){
+                              setState(() {
+                                isBeautyEnabled = !isBeautyEnabled;
+                              });
+                              GenericStreamService.toggleBeauty();
+                            },
+                            icon: Icon(isBeautyEnabled?Icons.face_retouching_natural:Icons.face_outlined , color: Colors.white,)),
+                        Stack(
+                          children: [
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  hasNotification = false;
+                                });
+                                showRequestsDialog(context);
+                              },
+                              icon: const Icon(
+                                Icons.login,
+                                color: Colors.white,
+                              ),
+                              tooltip: "Join Requests",
+                            ),
+
+                            // 🔴 Small red dot positioned at top-right
+                            if (hasNotification)
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        )
                       ],
                     ),
                   ),
@@ -783,16 +953,51 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                         ),
                       ),
 
+
                       IconButton(
-                        onPressed: _toggleControlsPanel,
-                        icon: Icon(
-                          showControlsPanel
-                              ? Icons.keyboard_arrow_down
-                              : Icons.keyboard_arrow_up,
-                          color: Colors.white,
-                          size: 30,
+                        onPressed:(){
+                          setState(() {
+                            hasNotification1 = false;
+                          });
+                          _toggleControlsPanel();
+                        },
+                        icon: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(
+                              showControlsPanel
+                                  ? Icons.keyboard_arrow_down
+                                  : Icons.keyboard_arrow_up,
+                              color: Colors.white,
+                              size: 30,
+                            ),
+                            if (hasNotification1)
+                              Positioned(
+                                right: 0,
+                                top: -1,
+                                child: Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
+
+                      // IconButton(
+                      //   onPressed: _toggleControlsPanel,
+                      //   icon: Icon(
+                      //     showControlsPanel
+                      //         ? Icons.keyboard_arrow_down
+                      //         : Icons.keyboard_arrow_up,
+                      //     color: Colors.white,
+                      //     size: 30,
+                      //   ),
+                      // ),
                     ],
                   ),
                 ),

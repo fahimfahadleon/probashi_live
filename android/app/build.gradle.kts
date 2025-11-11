@@ -33,6 +33,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -55,6 +60,14 @@ android {
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
+            isDebuggable = false
+        }
+    }
+
+    // Make native libraries 16 KB page aligned
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 }
@@ -63,7 +76,7 @@ flutter {
     source = "../.."
 }
 dependencies {
-    implementation("com.github.pedroSG94.RootEncoder:library:2.6.2")
+    implementation("com.github.pedroSG94.RootEncoder:library:2.6.6")
 //Optional, allow use CameraXSource and CameraUvcSource
 //    implementation("com.github.pedroSG94.RootEncoder:extra-sources:2.6.2")
     // other dependencies...

@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../utils/utils.dart';
+
 class GenericStreamService {
   static const MethodChannel _channel = MethodChannel('rtmp_channel');
 
@@ -61,6 +63,21 @@ class GenericStreamService {
       await _channel.invokeMethod('switchCamera');
     } catch (e) {
       print('Error switching camera: $e');
+    }
+  }
+  /// toggling between camera on and off
+  static Future<void> toggleCamera() async {
+    try {
+    await _channel.invokeMethod('toggleCamera');
+    } catch (e) {
+      print('Error toggling camera: $e');
+    }
+  }  /// toggling between camera on and off
+  static Future<void> toggleBeauty() async {
+    try {
+    await _channel.invokeMethod('toggleBeauty');
+    } catch (e) {
+      print('Error toggling camera: $e');
     }
   }
 

@@ -2,21 +2,23 @@ package com.horoftech.probashi_live;
 
 import android.app.Activity;
 import android.content.Context;
+import android.hardware.camera2.CameraCharacteristics;
 import android.util.Log;
 import android.view.SurfaceHolder;
-import android.view.SurfaceView;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.Toast;
+import com.pedro.encoder.input.video.CameraHelper.Facing;
 import com.pedro.encoder.input.sources.audio.AudioSource;
 import android.util.DisplayMetrics;
 import com.pedro.encoder.input.sources.video.Camera2Source;
-import com.pedro.encoder.input.sources.video.Camera1Source;
 import com.pedro.encoder.input.sources.video.VideoSource;
-
+import com.pedro.library.view.OpenGlView;
 import androidx.annotation.NonNull;
+import com.pedro.encoder.input.gl.render.filters.BlackFilterRender;
+import com.pedro.encoder.input.gl.render.filters.BeautyFilterRender;
 import com.pedro.encoder.input.sources.audio.MicrophoneSource;
-
+import com.pedro.library.generic.GenericCamera1;
 import com.pedro.common.ConnectChecker;
 import com.pedro.library.generic.GenericStream;
 import com.pedro.library.util.BitrateAdapter;
@@ -26,10 +28,15 @@ import io.flutter.plugin.platform.PlatformView;
 
 public class GenericStreamView extends FrameLayout implements PlatformView, ConnectChecker {
 
-    private final SurfaceView surfaceView;
+//    private final SurfaceView surfaceView;
+    private final OpenGlView surfaceView;
     private final GenericStream genericStream;
     private final BitrateAdapter bitrateAdapter;
+
     final int bitrate = 2200*1000;
+    Camera2Source source;
+    boolean isCameraOn = true;
+    boolean isBeautyEnabled = false;
 
 
     Context context;
@@ -37,17 +44,20 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
     public GenericStreamView(@NonNull Context context) {
         super(context);
         this.context = context;
-        surfaceView = new SurfaceView(context);
+        surfaceView = new OpenGlView(context);
         addView(surfaceView);
-
-
         genericStream = new GenericStream(context, this);
-
-
-
-
         bitrateAdapter = new BitrateAdapter(bitrat -> genericStream.setVideoBitrateOnFly(bitrat));
         bitrateAdapter.setMaxBitrate(bitrate);
+        VideoSource videoSource = genericStream.getVideoSource();
+        if (videoSource instanceof Camera2Source ) {
+            source = (Camera2Source)videoSource;
+            source.enableAutoWhiteBalance(CameraCharacteristics.CONTROL_AWB_MODE_DAYLIGHT);
+            source.enableAutoExposure();
+            if(source.getCameraFacing() == Facing.BACK){
+                source.switchCamera();
+            }
+        }
 
         surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
@@ -56,13 +66,12 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
                     genericStream.stopPreview();
                 }
                 genericStream.startPreview(surfaceView);
+//                genericStream.getGlInterface().addFilter(new BeautyFilterRender());
             }
-
             @Override
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
                 genericStream.getGlInterface().setPreviewResolution(width, height);
             }
-
             @Override
             public void surfaceDestroyed(SurfaceHolder holder) {
                 if (genericStream.isOnPreview()) {
@@ -79,7 +88,7 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
         Log.e("width",String.valueOf(width));
         Log.e("height",String.valueOf(height));
 
-        boolean prepared =  genericStream.prepareVideo(1920,1080,bitrate,28,2,90)
+        boolean prepared =  genericStream.prepareVideo(1280,720,bitrate,30,2,90)
                 && genericStream.prepareAudio(
                 44100,     // sampleRate
                 true,      // isStereo
@@ -90,6 +99,16 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
         if (!prepared) {
             Log.e("error","could not prepare video or audio");
             return;
+        }
+    }
+
+    public void toggleBeauty(){
+        if(isBeautyEnabled){
+            isBeautyEnabled = false;
+            genericStream.getGlInterface().removeFilter(0);
+        }else {
+            isBeautyEnabled = true;
+            genericStream.getGlInterface().addFilter(0,new BeautyFilterRender());
         }
     }
     public void startPreview(){
@@ -104,23 +123,22 @@ public class GenericStreamView extends FrameLayout implements PlatformView, Conn
         genericStream.startStream(url);
     }
 
+
     public void stopStream() {
         genericStream.stopStream();
     }
 
     public void switchCamera() {
-        VideoSource videoSource = genericStream.getVideoSource();
-        if (videoSource instanceof Camera2Source ) {
-            Camera2Source camera2Source = (Camera2Source)videoSource;
-            camera2Source.switchCamera();
+        source.switchCamera();
+    }
+    public void toggleCamera(){
+        if(isCameraOn){
+            isCameraOn = false;
+            genericStream.getGlInterface().addFilter(0, new BlackFilterRender());
+        }else {
+            isCameraOn = true;
+            genericStream.getGlInterface().removeFilter(0);
         }
-        else if (videoSource instanceof Camera1Source) {
-            ((Camera1Source) videoSource).switchCamera();
-        }
-//        else  if (videoSource instanceof CameraXSource) {
-//            ((CameraXSource) videoSource).switchCamera();
-//        }
-        
     }
 
     public void release() {

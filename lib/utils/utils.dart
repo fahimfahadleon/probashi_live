@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -23,6 +24,10 @@ class Utils{
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  static void copyToClipboard(String text) {
+    Clipboard.setData(ClipboardData(text: text));
   }
 
   static void printGreenComment(String comment) {

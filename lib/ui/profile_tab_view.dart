@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:probashi_live/ui/cached_circle_avatar.dart';
+import 'package:probashi_live/ui/coin_seller.dart';
 import 'package:probashi_live/ui/top_up_view.dart';
 import 'package:probashi_live/ui/vip_controllers.dart';
 import 'package:probashi_live/utils/api_service.dart';
@@ -404,9 +405,20 @@ class _MyPageState extends State<ProfileTabView> {
                     ),
                     _GridIcon(icon: Icons.wallet, label: "Earnings"),
                     _GridIcon(icon: Icons.task, label: "My Tasks"),
+                    _GridIcon(icon: Icons.wallet, label: "Diamond Seller",onTap: (){
+
+                    },),
+                    _GridIcon(icon: Icons.currency_bitcoin, label: "Diamond Transfer",onTap: (){
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CoinSeller(),
+                        ),
+                      );
+                    },),
                     _GridIcon(
                       icon: Icons.collections,
-                      label: "My Collections",
+                      label: "Baggage",
                       onTap: () {
                         Navigator.push(
                           context,

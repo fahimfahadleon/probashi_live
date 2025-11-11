@@ -113,7 +113,37 @@ class _HomePageState extends State<HomePage> {
         );
       });
 
+      SocketService.instance.onInvitationAcceptedCallback((payload) async {
+        print('payload: $payload');
 
+        // 3️⃣ Close the dialog (pop it)
+        if (Navigator.canPop(context)) {
+          Navigator.of(context).pop();
+        }
+
+        // 1️⃣ Show a loading dialog first
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()),
+        );
+
+        // 2️⃣ Wait for variables to be set or just a short delay
+        await Future.delayed(const Duration(milliseconds: 500));
+        Navigator.of(context).pop();
+
+        // 4️⃣ Navigate to ParticipantPage
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ParticipantPage(
+              from: payload.fromUser,
+              to: payload.userId,
+              sessionId: payload.sessionId,
+            ),
+          ),
+        );
+      });
     }
   }
 

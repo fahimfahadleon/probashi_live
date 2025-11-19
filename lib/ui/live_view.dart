@@ -389,9 +389,9 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     setState(() => showControlsPanel = !showControlsPanel);
   }
 
-  void _inviteParticipant() {
-    SocketService.instance.getFriends();
-  }
+  // void _inviteParticipant() {
+  //   SocketService.instance.getFriends();
+  // }
 
   void startPreview() async {
     GenericStreamService.startPreview();
@@ -748,7 +748,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                                   tappedUserId,
                                 );
                             profile.stats = stats;
-                            Utils.showMiniProfileDialog(profile, context);
+                            Utils.showMiniProfileDialog(userProfile: profile,context:  context);
                           } catch (e) {
                             print("Error loading profile: $e");
                           }

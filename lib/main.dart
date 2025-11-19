@@ -16,7 +16,9 @@ class MyApp extends StatelessWidget {
   Future<bool> checkLogin() async {
     final storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
+
     return token != null && token.isNotEmpty;
+
   }
 
   @override

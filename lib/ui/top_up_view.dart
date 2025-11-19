@@ -16,7 +16,7 @@ class TopUpView extends StatefulWidget {
 }
 
 class _TopUpViewState extends State<TopUpView> {
-  List<VIPDiamondPack> _packs = [];
+  List<ProductVipPackDto> _packs = [];
   late Settings settings;
   bool _loading = true;
   late List<Gateway> gateways;
@@ -24,23 +24,23 @@ class _TopUpViewState extends State<TopUpView> {
   @override
   void initState() {
     super.initState();
-    _fetchSettings();
+    initSettings();
     _fetchPacks();
   }
 
-
-  Future<void> _fetchSettings() async {
-    try {
-      settings = await ApiService.getApiClient().getSettings();
-      gateways = settings.gateways!;
-
-    } catch (e) {
-      debugPrint('Failed to fetch settings: $e');
+  Future<void> initSettings() async {
+    final fetchedSettings = await Utils.fetchSettings(); // call the static function
+    if (fetchedSettings != null) {
+      settings = fetchedSettings;
+      gateways = fetchedSettings.gateways ?? []; // fallback to empty list
+    }else{
+      throw Exception('Failed to fetch settings');
     }
   }
+
   Future<void> _fetchPacks() async {
     try {
-      final packs = await ApiService.getApiClient().getDiamondPacks();
+      final packs = await ApiService.getApiClient().getVipPacks();
       setState(() {
         _packs = packs;
         _loading = false;
@@ -56,7 +56,17 @@ class _TopUpViewState extends State<TopUpView> {
     return Scaffold(
       appBar: AppBar(title: const Text("VIP Diamond Packs")),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.9),
+            gradient: LinearGradient(
+              colors: [Color(0xFFDCB3FF), Color(0xFFB3E5FC)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+          child: const Center(child: CircularProgressIndicator())
+      )
           : Container(
               width: double.infinity,
               height: double.infinity,
@@ -78,10 +88,10 @@ class _TopUpViewState extends State<TopUpView> {
                       vertical: 6,
                     ),
                     child: ListTile(
-                      title: Text('${pack.diamonds} 💎'),
-                      subtitle: Text('\$${pack.price.toStringAsFixed(2)}'),
+                      title: Text('${pack.pack.diamonds} 💎'),
+                      subtitle: Text('\$${pack.pack.price.toStringAsFixed(2)}'),
                       trailing: Text(
-                        'Created: ${pack.createdAt.toLocal().toString().split(".")[0]}',
+                        'Created: ${pack.pack.createdAt.toLocal().toString().split(".")[0]}',
                         style: const TextStyle(fontSize: 12),
                       ),
                       onTap: () => _showPaymentDialog(context, pack),
@@ -93,11 +103,12 @@ class _TopUpViewState extends State<TopUpView> {
     );
   }
 
-  void _showPaymentDialog(BuildContext context, VIPDiamondPack pack) {
+  void _showPaymentDialog(BuildContext context, ProductVipPackDto dto) {
     final txnIdController = TextEditingController();
-    final methodController = TextEditingController();
     final descController = TextEditingController();
-    var selectedIndex = 0;
+
+    int selectedGatewayIndex = 0;
+
 
     bool isLoading = false;
 
@@ -105,117 +116,109 @@ class _TopUpViewState extends State<TopUpView> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return StatefulBuilder(builder: (context, setState) {
-          return AlertDialog(
-            insetPadding: EdgeInsets.symmetric(
-              vertical: 0,
-              horizontal: 16,
-            ),
-            title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Buy ${pack.diamonds} 💎 for \$${pack.price.toStringAsFixed(2)}'),
-              SizedBox(height: 16),
-              DropdownButton<int>(
-                value: selectedIndex,
-                items: List.generate(gateways.length, (index) {
-                  final g = gateways[index];
-                  return DropdownMenuItem<int>(
-                    value: index,
-                    child: Text('${g.phone} (${g.provider})'),
-                  );
-                }),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      selectedIndex = value;
-                      final g = gateways[value];
-                      Utils.copyToClipboard(g.phone);
-                      Utils.showToast(context, "Phone Number Copied!");
-                    });
-                  }
-                },
-                isExpanded: true,
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final selectedGateway = gateways[selectedGatewayIndex];
+
+
+            return AlertDialog(
+              insetPadding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+              title: Text(
+                'Buy ${dto.pack.diamonds} 💎 for \$${dto.pack.price.toStringAsFixed(2)}',
               ),
-            ],
-          ),
-            content: SizedBox(
-              width: MediaQuery
-                  .of(context)
-                  .size
-                  .width * 0.9,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: txnIdController,
-                      decoration: InputDecoration(labelText: 'Transaction ID'),
-                    ),
-                    TextField(
-                      controller: methodController,
-                      decoration: InputDecoration(labelText: 'Payment Method'),
-                    ),
-                    TextField(
-                      controller: descController,
-                      decoration: InputDecoration(labelText: 'Description (optional)'),
-                    ),
-                    if (isLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 16),
-                        child: CircularProgressIndicator(),
+              content: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      // Payment Gateway Dropdown
+                      DropdownButton<int>(
+                        value: selectedGatewayIndex,
+                        items: List.generate(gateways.length, (index) {
+                          final g = gateways[index];
+                          return DropdownMenuItem<int>(
+                            value: index,
+                            child: Text('${g.phone} (${g.provider})'),
+                          );
+                        }),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              selectedGatewayIndex = value;
+                              Utils.copyToClipboard(gateways[value].phone);
+                              Utils.showToast(context, "Phone Number Copied!");
+                            });
+                          }
+                        },
+                        isExpanded: true,
                       ),
-                  ],
+
+
+
+                      TextField(
+                        controller: txnIdController,
+                        decoration: InputDecoration(labelText: 'Transaction ID'),
+                      ),
+                      TextField(
+                        controller: descController,
+                        decoration: InputDecoration(labelText: 'Description (optional)'),
+                      ),
+                      if (isLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 16),
+                          child: CircularProgressIndicator(),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isLoading ? null : () => Navigator.pop(context),
-                child: const Text("Cancel"),
-              ),
-              ElevatedButton(
-                onPressed: isLoading
-                    ? null
-                    : () async {
-                  final txn = txnIdController.text.trim();
-                  final method = methodController.text.trim();
-                  final desc = descController.text.trim();
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                    final txn = txnIdController.text.trim();
+                    final desc = descController.text.trim();
+                    final methodName = selectedGateway.provider;
+                    final phoneForPayment = selectedGateway.phone;
 
-                  if (txn.isEmpty || method.isEmpty) {
-                    Utils.showToast(context, "Transaction ID and Payment Method are required");
-                    return;
-                  }
+                    if (txn.isEmpty || methodName.isEmpty) {
+                      Utils.showToast(context, "Transaction ID and payment method are required");
+                      return;
+                    }
 
-                  setState(() => isLoading = true);
+                    setState(() => isLoading = true);
 
-                  final dto = CreatePaymentDto(
-                    transactionId: txn,
-                    method: method,
-                    itemId: pack.id,
-                    description: desc.isEmpty ? null : desc,
-                  );
+                    final payment = CreatePaymentDto(
+                      transactionId: txn,
+                      method: methodName,
+                      productId: dto.id,
+                      description: desc.isEmpty ? "" : "$desc (Pay to: $phoneForPayment)",
+                    );
 
-                  try {
-                    await ApiService.getApiClient().requestPayment(dto);
-                    Navigator.pop(context);
-                    Utils.showToast(context, "Payment request is successful");
-                  } catch (e) {
-                    debugPrint('Payment error: $e');
-                    setState(() => isLoading = false);
-                    Utils.showToast(context, "Failed to submit payment request");
-                  }
-                },
-                child: const Text("Submit"),
-              ),
-            ],
-          );
-        });
+
+                    try {
+                      await ApiService.getApiClient().requestPayment(payment);
+                      Navigator.pop(context);
+                      Utils.showToast(context, "Payment request is successful");
+                    } catch (e) {
+                      debugPrint('Payment error: $e');
+                      setState(() => isLoading = false);
+                      Utils.showToast(context, "Failed to submit payment request");
+                    }
+                  },
+                  child: const Text("Submit"),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
   }
-
-
-
 
 }

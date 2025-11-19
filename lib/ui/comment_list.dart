@@ -55,7 +55,7 @@ class CommentList extends StatelessWidget {
                     final profile = await client.getUserProfile(user.id);
                     profile.stats = stats;
 
-                    Utils.showMiniProfileDialog(profile, context);
+                    Utils.showMiniProfileDialog(userProfile: profile, context: context);
                   },
                   child: CachedCircleAvatar(
                     imageUrl: user.profilePic,

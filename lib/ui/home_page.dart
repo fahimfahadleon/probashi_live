@@ -4,6 +4,7 @@ import 'package:probashi_live/ui/live_view.dart';
 import 'package:probashi_live/ui/participant_page.dart';
 import 'package:probashi_live/ui/profile_tab_view.dart';
 import 'package:probashi_live/ui/shorts_tab_view.dart';
+import 'package:probashi_live/ui/social_login_page.dart';
 import 'package:probashi_live/ui/video_tab_view.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/user_profile.dart';
@@ -62,6 +63,16 @@ class _HomePageState extends State<HomePage> {
     final token = await FlutterSecureStorage().read(key: 'access_token');
     if (token != null) {
       UserProfile profile = await ApiService.getApiClient().getMyProfile();
+      if(profile.isBlocked){
+        await FlutterSecureStorage().delete(key: 'access_token');
+        Utils.showToast(context, "Your account is blocked");
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) =>SocialLoginPage()),
+        );
+        return;
+      }
       Variables.currentUser = profile;
       socketService.connect(token);
       socketService.socket.on('connected', (data) async {

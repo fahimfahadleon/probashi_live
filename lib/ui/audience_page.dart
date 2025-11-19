@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:probashi_live/models/friend_user_model.dart';
 import 'package:probashi_live/models/live_gift.dart';
 import 'package:probashi_live/models/live_session.dart';
 import 'package:probashi_live/ui/comment_list.dart';
@@ -209,7 +210,7 @@ class _AudiencePageState extends State<AudiencePage>
                   UserProfile profile = await ApiService.getApiClient()
                       .getUserProfile(widget.hostUserId);
                   profile.stats = stats;
-                  Utils.showMiniProfileDialog(profile, context);
+                  Utils.showMiniProfileDialog(userProfile: profile, context: context);
                 },
                 onGiftTap: () => showGiftDialog(widget.hostUserId),
                 overlayText: widget.liveSession.hosts.first.user.name,
@@ -234,7 +235,7 @@ class _AudiencePageState extends State<AudiencePage>
                   UserProfile profile = await ApiService.getApiClient()
                       .getUserProfile(participantid);
                   profile.stats = stats;
-                  Utils.showMiniProfileDialog(profile, context);
+                  Utils.showMiniProfileDialog(userProfile: profile,context:  context);
                 },
                 onGiftTap: () => showGiftDialog(participantid),
                 overlayText: participants.first.user.name,
@@ -271,7 +272,7 @@ class _AudiencePageState extends State<AudiencePage>
                       UserProfile profile = await ApiService.getApiClient()
                           .getUserProfile(userId);
                       profile.stats = stats;
-                      Utils.showMiniProfileDialog(profile, context);
+                      Utils.showMiniProfileDialog(userProfile: profile, context: context);
                     },
                     onGiftTap: () => showGiftDialog(userId),
                     overlayText: p.user.name,
@@ -333,7 +334,7 @@ class _AudiencePageState extends State<AudiencePage>
                         UserStats stats = await ApiService.getApiClient().getUserStats(tappedUserId);
                         UserProfile profile = await ApiService.getApiClient().getUserProfile(tappedUserId);
                         profile.stats = stats;
-                        Utils.showMiniProfileDialog(profile, context);
+                        Utils.showMiniProfileDialog(userProfile: profile, context: context);
                       } catch (e) {
                         print("Error loading profile: $e");
                       }
@@ -410,6 +411,12 @@ class _AudiencePageState extends State<AudiencePage>
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white),
                     onPressed: () => Navigator.pop(context),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.report, color: Colors.white),
+                    onPressed: () =>{
+                        Utils.showReportDialog(context, widget.hostUserId)
+                    },
                   ),
                 ],
               ),

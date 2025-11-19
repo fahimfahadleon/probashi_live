@@ -7,13 +7,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:probashi_live/utils/socket_service.dart';
+import 'package:probashi_live/utils/variables.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:svgaplayer_flutter/parser.dart';
 import 'package:svgaplayer_flutter/proto/svga.pb.dart';
 
 import '../models/collection_name_request.dart';
+import '../models/friend_user_model.dart';
 import '../models/live_user.dart';
+import '../models/settings_model.dart';
 import '../models/user_profile.dart';
+import '../models/user_relations_dto.dart' hide UserRelation;
 import '../ui/mini_user_profile_dialog.dart';
 import '../ui/one_to_one_chat.dart';
 import '../ui/svga_overlay.dart';
@@ -36,27 +40,7 @@ class Utils{
     debugPrint('$green $comment $reset');
   }
 
-  static Future<UserRelation> toggleFollowStatus(UserProfile userProfile) async {
-    try {
-      if (userProfile.relation?.isFollowing == true) {
-        await ApiService.getApiClient().unfollowUser(userProfile.id);
-        return UserRelation(
-          isFollowing: false,
-          isFriend: userProfile.relation?.isFriend ?? false,
-        );
-      } else {
-        await ApiService.getApiClient().followUser(userProfile.id);
-        return UserRelation(
-          isFollowing: true,
-          isFriend: userProfile.relation?.isFriend ?? false,
-        );
-      }
-    } catch (e) {
-      print('Error toggling follow status: $e');
-      return userProfile.relation ?? UserRelation(isFollowing: false, isFriend: false);
 
-    }
-  }
 
   static requestPermission(BuildContext context) async {
     // Example: Request multiple permissions at once
@@ -158,6 +142,113 @@ class Utils{
     }
   }
 
+
+
+  static void showReportDialog(BuildContext context, String targetId) {
+    final formKey = GlobalKey<FormState>();
+    final emailController = TextEditingController();
+    final reasonController = TextEditingController();
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text('Report'),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: emailController,
+                      decoration: InputDecoration(
+                        labelText: 'Your Email',
+                        hintText: 'example@mail.com',
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Email required';
+                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                          return 'Enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: 12),
+                    TextFormField(
+                      controller: reasonController,
+                      decoration: InputDecoration(
+                        labelText: 'Reason',
+                        hintText: 'Describe the issue',
+                      ),
+                      maxLines: 3,
+                      validator: (value) =>
+                      value == null || value.isEmpty ? 'Reason required' : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                  if (!formKey.currentState!.validate()) return;
+
+                  setState(() => isLoading = true);
+
+                  try {
+                    final reportDto = CreateReportDto(
+                      email: emailController.text.trim(),
+                      reason: reasonController.text.trim(),
+                      targetId: targetId,
+                    );
+
+                    await ApiService.getApiClient().submitReport(reportDto);
+
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Report submitted successfully')),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  } finally {
+                    setState(() => isLoading = false);
+                  }
+                },
+                child: isLoading
+                    ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                    : Text('Submit'),
+              )
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+
+
+
   static String getActiveCollectionId(Map<String,dynamic>map, String activeCollection){
     final activeFrameId = map['active']?[activeCollection];
     final availableFrames = List<String>.from(map[activeCollection] ?? []);
@@ -169,36 +260,102 @@ class Utils{
     return activeFrameId;
 
   }
+  static Future<Settings?> fetchSettings() async {
+    try {
+      return await ApiService.getApiClient().getSettings();
+    } catch (e) {
+      print('Error fetching settings: $e');
+      return null;
+    }
+  }
 
-  static void showMiniProfileDialog(UserProfile userProfile, BuildContext context) {
+
+// Toggle follow/friend status for a user
+  static Future<UserRelation> toggleFollowStatus({
+    required String targetUserId,
+    UserRelation? existingRelation,
+  }) async {
+    try {
+      final api = ApiService.getApiClient();
+
+      // If already following/friend → unfollow
+      if (existingRelation?.isFollowing == true) {
+        await api.unfollowUser(targetUserId);
+        return UserRelation(
+          isFollowing: false,
+          isFriend: false,
+        );
+      }
+
+      // Otherwise, follow
+      final newRelationUser = await api.followUser(targetUserId);
+
+      // Extract relation info from DTO
+      final isFollowing = newRelationUser.relation.isFollowing;
+      final isFriend = newRelationUser.relation.isFriend;
+
+      return UserRelation(
+        isFollowing: isFollowing,
+        isFriend: isFriend,
+      );
+    } catch (e) {
+      print('Error toggling follow status: $e');
+      return existingRelation ?? UserRelation(isFollowing: false, isFriend: false);
+    }
+  }
+
+// Show mini profile dialog for either UserProfile or UserRelationUser
+  static void showMiniProfileDialog({
+    required BuildContext context,
+    UserProfile? userProfile,
+    UserRelationUser? userRelationUser,
+  }) {
+    // Convert UserRelationUser to UserProfile if needed
+    final profile = userProfile ??
+        (userRelationUser != null
+            ? UserProfile(
+          id: userRelationUser.id,
+          name: userRelationUser.name,
+          profilePic: userRelationUser.profilePic,
+          vipStatus: userRelationUser.vipStatus,
+          coin: 0,
+          diamond: 0,
+          level: 1,
+          isBlocked: false,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          relation: UserRelation(
+            isFollowing: userRelationUser.relation.isFollowing,
+            isFriend: userRelationUser.relation.isFriend,
+          ),
+        )
+            : null);
+
+    if (profile == null) return;
+
     showDialog(
       context: context,
-      builder: (context) =>
-          MiniUserProfileDialog(
-            userProfile: userProfile,
-            onRelationToggle: () async {
-              try {
-                final newRelation = await Utils.toggleFollowStatus(userProfile);
-                return newRelation;
-              } catch (e) {
-                print(e);
-                return UserRelation(isFollowing: false, isFriend: false);
-              }
-            },
-            onMessage: () {
-              Navigator.of(context).pop();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      ChatPage(
-                        currentUserId: SocketService.instance.userId,
-                        otherUserId: userProfile.id,
-                      ),
-                ),
-              );
-            },
-          ),
+      builder: (_) => MiniUserProfileDialog(
+        userProfile: profile,
+        onRelationToggle: () async {
+          return await toggleFollowStatus(
+            targetUserId: profile.id,
+            existingRelation: profile.relation,
+          );
+        },
+        onMessage: () {
+          Navigator.of(context).pop();
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChatPage(
+                currentUserId: Variables.currentUser!.id,
+                otherUserId: profile.id,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 

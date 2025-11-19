@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
+import '../utils/utils.dart';
 import 'cached_circle_avatar.dart';
 
 class MiniUserProfileDialog extends StatefulWidget {
@@ -55,9 +56,19 @@ class _MiniUserProfileDialogState extends State<MiniUserProfileDialog> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
             ),
             const SizedBox(height: 4),
-            Text(
-              "ID: ${user.id}",
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            GestureDetector(
+              onTap: () {
+                Utils.copyToClipboard(user.id);
+                Utils.showToast(context, "Id copied to clipboard!");
+              },
+              child: Text(
+                "ID: ${user.id}",
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                  decoration: TextDecoration.underline, // optional, shows it's clickable
+                ),
+              ),
             ),
             if (user.bio != null && user.bio!.isNotEmpty)
               Padding(
@@ -128,7 +139,7 @@ class _MiniUserProfileDialogState extends State<MiniUserProfileDialog> {
     return Chip(
       label: Text(label, style: const TextStyle(color: Colors.white)),
       avatar: Icon(icon, color: Colors.white, size: 16),
-      backgroundColor: color.withOpacity(0.7),
+      backgroundColor: color.withAlpha((0.7 * 255).toInt()),
       padding: const EdgeInsets.symmetric(horizontal: 8),
     );
   }

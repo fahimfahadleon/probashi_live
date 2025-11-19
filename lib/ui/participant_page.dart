@@ -490,7 +490,7 @@ class _ParticipantPageState extends State<ParticipantPage>
                           UserProfile profile = await ApiService.getApiClient()
                               .getUserProfile(tappedUserId);
                           profile.stats = stats;
-                          Utils.showMiniProfileDialog(profile, context);
+                          Utils.showMiniProfileDialog(userProfile: profile,context:  context);
                         } catch (e) {
                           print("Error loading profile: $e");
                         }

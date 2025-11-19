@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:probashi_live/ui/cached_circle_avatar.dart';
 import 'package:probashi_live/ui/coin_seller.dart';
+import 'package:probashi_live/ui/social_relation_page.dart';
 import 'package:probashi_live/ui/top_up_view.dart';
 import 'package:probashi_live/ui/vip_controllers.dart';
 import 'package:probashi_live/utils/api_service.dart';
@@ -23,9 +24,9 @@ class ProfileTabView extends StatefulWidget {
 class _MyPageState extends State<ProfileTabView> {
   late Future<UserProfile> _futureProfile;
   UserStats _status = UserStats(followers: 0, following: 0, friends: 0);
-  List<Offer> _offers = [];
+  List<ProductOfferDto> _offers = [];
   int _currentOfferIndex = 0;
-  Offer? _currentOffer;
+  ProductOfferDto? _currentOffer;
   Timer? _offerTimer;
   bool _hasLoaded = false;
 
@@ -307,20 +308,47 @@ class _MyPageState extends State<ProfileTabView> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _InfoColumn(
+                      InfoColumn(
                         title: "Friends",
+                        onPressed: (){
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SocialRelationsPage(initialTab: 1), // opens Followers
+                            ),
+                          );
+
+                        },
                         value: _status.friends.toString().isEmpty
                             ? "0"
                             : _status.friends.toString(),
                       ),
-                      _InfoColumn(
+                      InfoColumn(
                         title: "Followers",
+                        onPressed: (){
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SocialRelationsPage(initialTab: 2), // opens Followers
+                            ),
+                          );
+
+                        },
                         value: _status.followers.toString().isEmpty
                             ? "0"
                             : _status.followers.toString(),
                       ),
-                      _InfoColumn(
+                      InfoColumn(
                         title: "Following",
+                        onPressed: (){
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SocialRelationsPage(initialTab: 3), // opens Followers
+                            ),
+                          );
+
+                        },
                         value: _status.following.toString().isEmpty
                             ? "0"
                             : _status.following.toString(),
@@ -348,7 +376,7 @@ class _MyPageState extends State<ProfileTabView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _currentOffer!.title,
+                              _currentOffer!.offer.title,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -356,7 +384,7 @@ class _MyPageState extends State<ProfileTabView> {
                               ),
                             ),
                             Text(
-                              _currentOffer!.content,
+                              _currentOffer!.offer.content,
                               style: const TextStyle(color: Colors.white70),
                             ),
                           ],
@@ -373,7 +401,7 @@ class _MyPageState extends State<ProfileTabView> {
                             context,
                             MaterialPageRoute(
                               builder: (context) =>
-                                  OfferDetailsView(offer: _currentOffer!),
+                                  OfferListView(),
                             ),
                           );
                         },
@@ -412,7 +440,7 @@ class _MyPageState extends State<ProfileTabView> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const CoinSeller(),
+                          builder: (context) => const CoinSellerPage(),
                         ),
                       );
                     },),
@@ -453,22 +481,40 @@ class _MyPageState extends State<ProfileTabView> {
   }
 }
 
-class _InfoColumn extends StatelessWidget {
+class InfoColumn extends StatelessWidget {
   final String title;
   final String value;
+  final VoidCallback? onPressed;
 
-  const _InfoColumn({required this.title, required this.value});
+  const InfoColumn({
+    super.key,
+    required this.title,
+    required this.value,
+    this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        Text(title, style: TextStyle(color: Colors.grey)),
-      ],
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(8),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

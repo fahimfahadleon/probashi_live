@@ -25,3 +25,17 @@ Map<String, dynamic> _$FriendUserModelToJson(FriendUserModel instance) =>
       'settings': instance.settings,
       'level': instance.level,
     };
+
+CreateReportDto _$CreateReportDtoFromJson(Map<String, dynamic> json) =>
+    CreateReportDto(
+      email: json['email'] as String,
+      reason: json['reason'] as String,
+      targetId: json['targetId'] as String?,
+    );
+
+Map<String, dynamic> _$CreateReportDtoToJson(CreateReportDto instance) =>
+    <String, dynamic>{
+      'email': instance.email,
+      'reason': instance.reason,
+      'targetId': instance.targetId,
+    };

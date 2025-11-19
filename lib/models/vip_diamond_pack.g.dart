@@ -6,20 +6,31 @@ part of 'vip_diamond_pack.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-VIPDiamondPack _$VIPDiamondPackFromJson(Map<String, dynamic> json) =>
-    VIPDiamondPack(
+VipPackDto _$VipPackDtoFromJson(Map<String, dynamic> json) => VipPackDto(
       id: json['id'] as String,
-      price: (json['price'] as num).toDouble(),
       diamonds: (json['diamonds'] as num).toInt(),
+      price: (json['price'] as num).toDouble(),
       createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
 
-Map<String, dynamic> _$VIPDiamondPackToJson(VIPDiamondPack instance) =>
+Map<String, dynamic> _$VipPackDtoToJson(VipPackDto instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'price': instance.price,
       'diamonds': instance.diamonds,
+      'price': instance.price,
       'createdAt': instance.createdAt.toIso8601String(),
-      'updatedAt': instance.updatedAt.toIso8601String(),
+    };
+
+ProductVipPackDto _$ProductVipPackDtoFromJson(Map<String, dynamic> json) =>
+    ProductVipPackDto(
+      id: json['id'] as String,
+      type: json['type'] as String,
+      pack: VipPackDto.fromJson(json['vipPack'] as Map<String, dynamic>),
+    );
+
+Map<String, dynamic> _$ProductVipPackDtoToJson(ProductVipPackDto instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'type': instance.type,
+      'vipPack': instance.pack,
     };

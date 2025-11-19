@@ -25,3 +25,21 @@ class FriendUserModel {
 
   Map<String, dynamic> toJson() => _$FriendUserModelToJson(this);
 }
+
+@JsonSerializable()
+class CreateReportDto {
+  final String email;
+  final String reason;
+  final String? targetId;
+
+  CreateReportDto({
+    required this.email,
+    required this.reason,
+    this.targetId,
+  });
+
+  factory CreateReportDto.fromJson(Map<String, dynamic> json) =>
+      _$CreateReportDtoFromJson(json);
+
+  Map<String, dynamic> toJson() => _$CreateReportDtoToJson(this);
+}

@@ -72,7 +72,7 @@ class _DoubleBackToExitState extends State<DoubleBackToExit> {
         if (lastPressed == null ||
             now.difference(lastPressed!) > const Duration(seconds: 2)) {
           lastPressed = now;
-          Utils.showToast(context,'Press back again to exit');
+          Utils.showSnackbar(context,'Press back again to exit');
           return;
         }
 

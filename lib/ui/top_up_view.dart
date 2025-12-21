@@ -146,7 +146,7 @@ class _TopUpViewState extends State<TopUpView> {
                             setState(() {
                               selectedGatewayIndex = value;
                               Utils.copyToClipboard(gateways[value].phone);
-                              Utils.showToast(context, "Phone Number Copied!");
+                              Utils.showSnackbar(context, "Phone Number Copied!");
                             });
                           }
                         },
@@ -187,7 +187,7 @@ class _TopUpViewState extends State<TopUpView> {
                     final phoneForPayment = selectedGateway.phone;
 
                     if (txn.isEmpty || methodName.isEmpty) {
-                      Utils.showToast(context, "Transaction ID and payment method are required");
+                      Utils.showSnackbar(context, "Transaction ID and payment method are required");
                       return;
                     }
 
@@ -204,11 +204,11 @@ class _TopUpViewState extends State<TopUpView> {
                     try {
                       await ApiService.getApiClient().requestPayment(payment);
                       Navigator.pop(context);
-                      Utils.showToast(context, "Payment request is successful");
+                      Utils.showSnackbar(context, "Payment request is successful");
                     } catch (e) {
                       debugPrint('Payment error: $e');
                       setState(() => isLoading = false);
-                      Utils.showToast(context, "Failed to submit payment request");
+                      Utils.showSnackbar(context, "Failed to submit payment request");
                     }
                   },
                   child: const Text("Submit"),

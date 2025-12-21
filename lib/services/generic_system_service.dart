@@ -1,6 +1,5 @@
 import 'package:flutter/services.dart';
 
-import '../utils/utils.dart';
 
 class GenericStreamService {
   static const MethodChannel _channel = MethodChannel('rtmp_channel');

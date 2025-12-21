@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:probashi_live/models/friend_user_model.dart';
-import 'package:probashi_live/models/live_gift.dart';
 import 'package:probashi_live/models/live_session.dart';
 import 'package:probashi_live/ui/comment_list.dart';
-import 'package:probashi_live/ui/decorated_participant_view.dart';
 import 'package:probashi_live/ui/participant_video_widget.dart';
 import 'package:svgaplayer_flutter/player.dart';
 
@@ -11,12 +8,10 @@ import '../models/gift.dart';
 import '../models/live_comment.dart';
 import '../models/live_user.dart';
 import '../models/user_profile.dart';
-import '../utils/api_service.dart';
 import '../utils/socket_service.dart';
 import '../utils/utils.dart';
 import '../utils/variables.dart';
 import 'cached_circle_avatar.dart';
-import 'gift_dialog.dart';
 
 class AudiencePage extends StatefulWidget {
   final LiveSession liveSession;
@@ -38,29 +33,19 @@ class _AudiencePageState extends State<AudiencePage>
   final TextEditingController _chatController = TextEditingController();
   final List<LiveComment> comments = [];
   final List<LiveUser> participants = [];
-
+  bool isParticipantAvail = false;
   SVGAAnimationController? _svgaController;
   bool _showGiftAnimation = false;
 
   String _giftSenderName = ""; // store sender username
   String _giftReceiverName = "";
   int _giftAmount = 0;
-
+  List<LiveUser> list = [];
+  bool isMuted = false;
   bool showCommentList = true;
   bool showControlsPanel = false;
 
   int viewerCount = 0;
-
-  void showGiftDialog(String toUserId) {
-    showDialog(
-      context: context,
-      builder: (_) => GiftDialog(
-        onGiftClick: (gift) {
-          sendGift(gift, toUserId);
-        },
-      ),
-    );
-  }
 
   @override
   void initState() {
@@ -93,6 +78,32 @@ class _AudiencePageState extends State<AudiencePage>
     SocketService.instance.onParticipantJoined((participant) {
       // setState(() => participants.add(participant));
     });
+    SocketService.instance.onAudienceKicked((data) {
+      Map<String, dynamic> info = data;
+      if (info['sessionId'] == widget.sessionId) {
+        Utils.showSnackbar(context, "You have been kicked by host.");
+        Navigator.pop(context);
+      }
+    });
+
+    SocketService.instance.onAudienceMuted((data) {
+      Map<String, dynamic> info = data;
+      if (info['sessionId'] == widget.sessionId) {
+        setState(() {
+          Utils.showSnackbar(context, "You have been Muted by host.");
+          isMuted = true;
+        });
+      }
+    });
+    SocketService.instance.onAudienceUnMute((data) {
+      Map<String, dynamic> info = data;
+      if (info['sessionId'] == widget.sessionId) {
+        setState(() {
+          Utils.showSnackbar(context, "You have been UnMuted by host.");
+          isMuted = false;
+        });
+      }
+    });
 
     SocketService.instance.onParticipantLeft((participant) {
       setState(() {
@@ -110,7 +121,7 @@ class _AudiencePageState extends State<AudiencePage>
     });
 
     SocketService.instance.onLiveEnded((session) {
-      Utils.showToast(context, "The Live Ended!");
+      Utils.showSnackbar(context, "The Live Ended!");
       Navigator.pop(context);
     });
 
@@ -119,6 +130,10 @@ class _AudiencePageState extends State<AudiencePage>
       setState(() {
         viewerCount = session.audience.length;
         participants.addAll(session.participants);
+        list = [
+          ...session.audience.where((u) => u.user.vipStatus),
+          ...session.audience.where((u) => !u.user.vipStatus),
+        ];
       });
     });
 
@@ -162,20 +177,15 @@ class _AudiencePageState extends State<AudiencePage>
   }
 
   void _sendComment() {
+    if (isMuted) {
+      Utils.showToast("You are muted by host.");
+      return;
+    }
     final msg = _chatController.text.trim();
     if (msg.isNotEmpty) {
       SocketService.instance.sendComment(msg);
       _chatController.clear();
     }
-  }
-
-  void sendGift(Gift gift, String toUserId) {
-    LiveGift liveGift = LiveGift(
-      toUserId: toUserId,
-      sessionId: widget.sessionId,
-      giftId: gift.id,
-    );
-    SocketService.instance.sendGift(liveGift);
   }
 
   Widget _buildStreamGrid() {
@@ -189,7 +199,11 @@ class _AudiencePageState extends State<AudiencePage>
       );
     }
 
-    String participantid = participants.first.user.id;
+    String hostUserId = widget.hostUserId;
+    String participantId = participants.first.user.id;
+    UserProfile hostProfile = widget.liveSession.hosts.first.user;
+    UserProfile participantProfile = participants.first.user;
+    String sessionId = widget.sessionId;
 
     // --- Top Row: Host + Self ---
     final topRow = Row(
@@ -200,20 +214,11 @@ class _AudiencePageState extends State<AudiencePage>
             aspectRatio: 9 / 16,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
-              child: DecoratedParticipantView(
-                streamUrl: mainStreamUrl,
-                avatarUrl: widget.liveSession.hosts.first.user.profilePic,
-                liveUser: widget.liveSession.hosts.first.user,
-                onProfileTap: () async {
-                  UserStats stats = await ApiService.getApiClient()
-                      .getUserStats(widget.hostUserId);
-                  UserProfile profile = await ApiService.getApiClient()
-                      .getUserProfile(widget.hostUserId);
-                  profile.stats = stats;
-                  Utils.showMiniProfileDialog(userProfile: profile, context: context);
-                },
-                onGiftTap: () => showGiftDialog(widget.hostUserId),
-                overlayText: widget.liveSession.hosts.first.user.name,
+              child: Utils.getParticipant(
+                context,
+                hostUserId,
+                hostProfile,
+                sessionId,
               ),
             ),
           ),
@@ -225,20 +230,11 @@ class _AudiencePageState extends State<AudiencePage>
             aspectRatio: 9 / 16,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
-              child: DecoratedParticipantView(
-                streamUrl: "${Variables.RTMP_URL}/$participantid",
-                avatarUrl: participants.first.user.profilePic,
-                liveUser: participants.first.user,
-                onProfileTap: () async {
-                  UserStats stats = await ApiService.getApiClient()
-                      .getUserStats(participantid);
-                  UserProfile profile = await ApiService.getApiClient()
-                      .getUserProfile(participantid);
-                  profile.stats = stats;
-                  Utils.showMiniProfileDialog(userProfile: profile,context:  context);
-                },
-                onGiftTap: () => showGiftDialog(participantid),
-                overlayText: participants.first.user.name,
+              child: Utils.getParticipant(
+                context,
+                participantId,
+                participantProfile,
+                sessionId,
               ),
             ),
           ),
@@ -248,6 +244,11 @@ class _AudiencePageState extends State<AudiencePage>
 
     // --- Guest participants: 3rd to 6th only ---
     final guestParticipants = participants.skip(1).take(4).toList();
+    if (guestParticipants.isNotEmpty) {
+      isParticipantAvail = true;
+    } else {
+      isParticipantAvail = false;
+    }
 
     final guestRow = Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -255,6 +256,7 @@ class _AudiencePageState extends State<AudiencePage>
         if (index < guestParticipants.length) {
           final p = guestParticipants[index];
           final userId = p.user.id;
+          final UserProfile userProfile = p.user;
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.all(4.0),
@@ -262,20 +264,11 @@ class _AudiencePageState extends State<AudiencePage>
                 aspectRatio: 9 / 16,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16.0),
-                  child: DecoratedParticipantView(
-                    streamUrl: "${Variables.RTMP_URL}/$userId",
-                    avatarUrl: p.user.profilePic,
-                    liveUser: p.user,
-                    onProfileTap: () async {
-                      UserStats stats = await ApiService.getApiClient()
-                          .getUserStats(userId);
-                      UserProfile profile = await ApiService.getApiClient()
-                          .getUserProfile(userId);
-                      profile.stats = stats;
-                      Utils.showMiniProfileDialog(userProfile: profile, context: context);
-                    },
-                    onGiftTap: () => showGiftDialog(userId),
-                    overlayText: p.user.name,
+                  child: Utils.getParticipant(
+                    context,
+                    userId,
+                    userProfile,
+                    sessionId,
                   ),
                 ),
               ),
@@ -320,37 +313,28 @@ class _AudiencePageState extends State<AudiencePage>
           // Streamer name + close button
           Positioned(
             top: 20,
-            left: 16,
-            right: 16,
-            child: IntrinsicHeight( // ensures children size themselves correctly
+            left: 4,
+            right: 4,
+            child: IntrinsicHeight(
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center, // center all vertically
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  GestureDetector(
-                    onTap: () async {
-                      final tappedUserId = widget.hostUserId;
-                      if (tappedUserId == SocketService.instance.userId) return;
-                      try {
-                        UserStats stats = await ApiService.getApiClient().getUserStats(tappedUserId);
-                        UserProfile profile = await ApiService.getApiClient().getUserProfile(tappedUserId);
-                        profile.stats = stats;
-                        Utils.showMiniProfileDialog(userProfile: profile, context: context);
-                      } catch (e) {
-                        print("Error loading profile: $e");
-                      }
-                    },
-                    child: CachedCircleAvatar(
-                      imageUrl: widget.liveSession.hosts.first.user.profilePic,
-                      user: widget.liveSession.hosts.first.user.settings,
-                      radius: 20,
-                    ),
+                  /// Host profile picture
+                  CachedCircleAvatar(
+                    imageUrl: widget.liveSession.hosts.first.user.profilePic,
+                    user: widget.liveSession.hosts.first.user.settings,
+                    radius: 20,
                   ),
-                  const SizedBox(width: 6),
+
+                  const SizedBox(width: 4),
+
+                  /// Name + viewer count + horizontal list
                   Expanded(
                     child: Column(
-                      mainAxisSize: MainAxisSize.min, // ensures vertical shrink-wrap
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        /// Name + viewer count (same row)
                         Row(
                           children: [
                             Text(
@@ -361,67 +345,78 @@ class _AudiencePageState extends State<AudiencePage>
                                 fontSize: 16,
                               ),
                             ),
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.remove_red_eye,
+                              size: 14,
+                              color: Colors.white70,
+                            ),
                             const SizedBox(width: 4),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.remove_red_eye,
-                                  size: 14,
-                                  color: Colors.white70,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  "$viewerCount viewers",
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              "$viewerCount viewers",
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        GestureDetector(
-                          onTap: (){
-                            Utils.copyToClipboard(widget.liveSession.hosts.first.user.id);
-                            Utils.showToast(context, "Id Copied!");
-                          },
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.note,
-                                size: 14,
-                                color: Colors.white70,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                widget.liveSession.hosts.first.user.id,
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
+
+                        const SizedBox(height: 6),
+
+                        /// Horizontal VIP-first ListView
+                        SizedBox(
+                          height: 28,
+                          child: ListView.separated(
+                            padding: EdgeInsets.zero,
+                            scrollDirection: Axis.horizontal,
+                            itemCount: list.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 1),
+                            itemBuilder: (context, index) {
+                              final user = list[index];
+                              return SizedBox(
+                                width: 28,
+                                child: CachedCircleAvatar(
+                                  imageUrl: user.user.profilePic,
+                                  user: user.user.settings,
+                                  radius: 14,
                                 ),
-                              ),
-                            ],
+                              );
+                            },
                           ),
                         ),
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.report, color: Colors.white),
-                    onPressed: () =>{
-                        Utils.showReportDialog(context, widget.hostUserId)
+
+                  /// Close button
+                  InkWell(
+                    onTap: () {
+                      SocketService.instance.audienceLeave();
+                      Navigator.pop(context);
                     },
+                    borderRadius: BorderRadius.circular(20),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.close, color: Colors.white, size: 20),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => {
+                      Utils.showReportDialog(context, widget.hostUserId),
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.report, color: Colors.white, size: 20),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
+
           if (_showGiftAnimation)
             Positioned.fill(
               child: IgnorePointer(
@@ -461,51 +456,51 @@ class _AudiencePageState extends State<AudiencePage>
                                 ),
                               ],
                             ),
-                              child: RichText(
-                                textAlign: TextAlign.center,
-                                text: TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text: _giftSenderName,
-                                      style: const TextStyle(
-                                        color: Colors.orangeAccent,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                      ),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: _giftSenderName,
+                                    style: const TextStyle(
+                                      color: Colors.orangeAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
                                     ),
-                                    const TextSpan(
-                                      text: ' sent a gift to ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                      ),
+                                  ),
+                                  const TextSpan(
+                                    text: ' sent a gift to ',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
                                     ),
-                                    TextSpan(
-                                      text: _giftReceiverName,
-                                      style: const TextStyle(
-                                        color: Colors.lightBlueAccent,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                      ),
+                                  ),
+                                  TextSpan(
+                                    text: _giftReceiverName,
+                                    style: const TextStyle(
+                                      color: Colors.lightBlueAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
                                     ),
-                                    const TextSpan(
-                                      text: ' worth ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                      ),
+                                  ),
+                                  const TextSpan(
+                                    text: ' worth ',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
                                     ),
-                                    TextSpan(
-                                      text: '\n$_giftAmount 💎', // second line
-                                      style: const TextStyle(
-                                        color: Colors.yellowAccent,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                      ),
+                                  ),
+                                  TextSpan(
+                                    text: '\n$_giftAmount 💎', // second line
+                                    style: const TextStyle(
+                                      color: Colors.yellowAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
                                     ),
-                                  ],
-                                ),
-                              )
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -520,7 +515,9 @@ class _AudiencePageState extends State<AudiencePage>
             Positioned(
               left: 0,
               bottom: keyboardHeight + 60,
-              height: MediaQuery.of(context).size.height * 0.3,
+              height: isParticipantAvail
+                  ? MediaQuery.of(context).size.height * 0.2
+                  : MediaQuery.of(context).size.height * 0.3,
               width: MediaQuery.of(context).size.width * 0.8,
               child: CommentList(comments: comments),
             ),
@@ -547,12 +544,12 @@ class _AudiencePageState extends State<AudiencePage>
                   children: [
                     IconButton(
                       onPressed: () {
-                        SocketService.instance.requestToJoin(SocketService.instance.userId,widget.hostUserId);
+                        SocketService.instance.requestToJoin(
+                          SocketService.instance.userId,
+                          widget.hostUserId,
+                        );
                       }, // Add gift logic here
-                      icon: const Icon(
-                        Icons.join_full,
-                        color: Colors.white,
-                      ),
+                      icon: const Icon(Icons.join_full, color: Colors.white),
                       tooltip: "Request to join",
                     ),
                   ],
@@ -596,7 +593,11 @@ class _AudiencePageState extends State<AudiencePage>
                   ),
                   IconButton(
                     onPressed: () {
-                      showGiftDialog(widget.hostUserId);
+                      Utils.showGiftDialog(
+                        context,
+                        widget.hostUserId,
+                        widget.sessionId,
+                      );
                     },
                     icon: Icon(
                       Icons.wallet_giftcard,

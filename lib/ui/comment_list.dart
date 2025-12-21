@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:probashi_live/ui/svga_overlay.dart';
-
 import '../models/live_comment.dart';
-import '../models/user_profile.dart';
 import '../utils/api_service.dart';
 import '../utils/socket_service.dart';
 import '../utils/utils.dart';
@@ -29,7 +26,7 @@ class CommentList extends StatelessWidget {
       reverse: true,
       itemCount: comments.length,
       itemBuilder: (context, index) {
-        final c = comments[comments.length - 1 - index]; // simpler
+        final c = comments[comments.length - 1 - index];
         final user = c.liveUser.user;
 
         return Container(
@@ -41,8 +38,9 @@ class CommentList extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center, // Center vertically
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // Avatar
                 GestureDetector(
                   onTap: () async {
                     final myId = SocketService.instance.userId;
@@ -55,7 +53,10 @@ class CommentList extends StatelessWidget {
                     final profile = await client.getUserProfile(user.id);
                     profile.stats = stats;
 
-                    Utils.showMiniProfileDialog(userProfile: profile, context: context);
+                    Utils.showMiniProfileDialog(
+                      userProfile: profile,
+                      context: context,
+                    );
                   },
                   child: CachedCircleAvatar(
                     imageUrl: user.profilePic,
@@ -63,13 +64,19 @@ class CommentList extends StatelessWidget {
                     radius: 15,
                   ),
                 ),
-                const SizedBox(width: 2), // Reduced gap
+
+                const SizedBox(width: 2),
+
+                // Name + Message
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min, // to avoid extra height
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           user.name,
@@ -79,7 +86,7 @@ class CommentList extends StatelessWidget {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 2), // Reduced vertical gap
+                        const SizedBox(height: 2),
                         Text(
                           c.message,
                           style: const TextStyle(
@@ -91,11 +98,42 @@ class CommentList extends StatelessWidget {
                     ),
                   ),
                 ),
+
+                // ACTION ICONS (MUTE + KICK)
+                if (isHost)
+                  Row(
+                    children: [
+                      // MUTE BUTTON
+                      GestureDetector(
+                        onTap: () => onMuteUser!.call(user.id),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.volume_off,
+                            size: 18,
+                            color: Colors.orangeAccent,
+                          ),
+                        ),
+                      ),
+
+                      // KICK BUTTON
+                      GestureDetector(
+                        onTap: () => onKickUser!.call(user.id),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.exit_to_app,
+                            size: 18,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
         );
-
       },
     );
   }

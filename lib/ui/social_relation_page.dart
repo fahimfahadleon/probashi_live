@@ -153,7 +153,7 @@ class UserProfileItem extends StatelessWidget {
           GestureDetector(
             onTap: () {
               Utils.copyToClipboard(user.id);
-              Utils.showToast(context, "Id copied to clipboard!");
+              Utils.showSnackbar(context, "Id copied to clipboard!");
             },
             child: Text(
               'ID: ${user.id}',

@@ -5,7 +5,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:probashi_live/models/live_session.dart';
 import 'package:probashi_live/ui/comment_list.dart';
-import 'package:probashi_live/ui/participant_video_widget.dart';
 import 'package:svgaplayer_flutter/player.dart';
 
 import '../models/friend_user_model.dart';
@@ -55,18 +54,18 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   bool _showGiftAnimation = false;
   String _giftSenderName = '';
   String _giftReceiverName = '';
+  bool isParticipantAvail = false;
+  List<String> mutedUsers = [];
+  List<LiveUser> list = [];
 
   @override
   void initState() {
     super.initState();
 
-
     PermissionService.requestPermission(
       context,
       onGranted: () {
-
         GenericStreamService.initialize();
-
 
         _svgaController = SVGAAnimationController(vsync: this);
 
@@ -128,18 +127,8 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
           });
         });
 
-        SocketService.instance.onAudienceJoined((audienceUser) {
-          setState(() {
-            viewerCount++;
-            // Optionally store them somewhere or show UI
-          });
-        });
-        SocketService.instance.onAudienceLeft((callback) {
-          setState(() {
-            viewerCount--;
-            // Optionally store them somewhere or show UI
-          });
-        });
+        SocketService.instance.onAudienceJoined((audienceUser) {});
+        SocketService.instance.onAudienceLeft((callback) {});
 
         SocketService.instance.onSessionUpdated((updatedSession) {
           final updated = updatedSession.participants;
@@ -148,7 +137,9 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
           final isSameLength = participants.length == updated.length;
           final isSameContent =
               isSameLength &&
-                  participants.every((p) => updated.any((u) => u.user.id == p.user.id));
+              participants.every(
+                (p) => updated.any((u) => u.user.id == p.user.id),
+              );
 
           if (!isSameLength || !isSameContent) {
             setState(() {
@@ -157,7 +148,14 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                 ..addAll(updated);
             });
           }
-          session = updatedSession;
+          setState(() {
+            session = updatedSession;
+            viewerCount = updatedSession.audience.length;
+            list = [
+              ...updatedSession.audience.where((u) => u.user.vipStatus),
+              ...updatedSession.audience.where((u) => !u.user.vipStatus),
+            ];
+          });
         });
 
         SocketService.instance.onLiveEnded((sessionData) {
@@ -178,7 +176,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
           showFriendInviteDialog(context, friendList);
         });
 
-        SocketService.instance.onAudienceRequested((data){
+        SocketService.instance.onAudienceRequested((data) {
           final exists = users.any((user) => user.id == data.id);
           if (!exists) {
             users.add(data);
@@ -189,19 +187,16 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
           }
         });
 
-
-
         SocketService.instance.onInviteAccepted((data) {});
         SocketService.instance.onInviteCanceled((data) {
-          Utils.showToast(context, "Invite canceled");
+          Utils.showSnackbar(context, "Invite canceled");
         });
       },
       onDenied: () {
-        Utils.showToast(context, "Permission Denied");
+        Utils.showSnackbar(context, "Permission Denied");
         Navigator.pop(context);
       },
     );
-
   }
 
   void showFriendInviteDialog(
@@ -259,7 +254,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                               sessionId: session.id,
                             );
                             Navigator.pop(context);
-                            Utils.showToast(
+                            Utils.showSnackbar(
                               context,
                               "Invite sent to ${friend.name}",
                             );
@@ -378,11 +373,15 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   }
 
   void _kickUser(String userId) {
-    SocketService.instance.kickParticipant(userId);
+    SocketService.instance.kickAudience(userId);
   }
 
   void _muteUser(String userId) {
-    SocketService.instance.muteParticipant(userId);
+    SocketService.instance.muteAudience(userId);
+  }
+
+  void _unmuteUser(String s) {
+    SocketService.instance.unMuteAudience(s);
   }
 
   void _toggleControlsPanel() {
@@ -446,15 +445,20 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
       (p) => p.user.id != hostId,
     );
 
+    final firstParticipantUser = firstParticipant.user;
+    final firstParticipantId = firstParticipant.user.id;
+
     final participantVLCView = firstParticipant != null
         ? Expanded(
             child: AspectRatio(
               aspectRatio: 9 / 16,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16.0),
-                child: ParticipantVideoWidget(
-                  streamUrl:
-                      "${Variables.RTMP_URL}/${firstParticipant.user.id}",
+                child: Utils.getParticipant(
+                  context,
+                  firstParticipantId,
+                  firstParticipantUser,
+                  session.id,
                 ),
               ),
             ),
@@ -469,11 +473,18 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
         .take(4)
         .toList();
 
+    if (remainingParticipants.isNotEmpty) {
+      isParticipantAvail = true;
+    } else {
+      isParticipantAvail = false;
+    }
+
     // Guest row with up to 4 VLC participants, and empty slots if needed
     final guestRow = Row(
       children: List.generate(4, (index) {
         if (index < remainingParticipants.length) {
           final userId = remainingParticipants[index].user.id;
+          final UserProfile userProfile = remainingParticipants[index].user;
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.all(4.0),
@@ -481,8 +492,11 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                 aspectRatio: 9 / 16,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16.0),
-                  child: ParticipantVideoWidget(
-                    streamUrl: "${Variables.RTMP_URL}/$userId",
+                  child: Utils.getParticipant(
+                    context,
+                    userId,
+                    userProfile,
+                    session.id,
                   ),
                 ),
               ),
@@ -517,13 +531,14 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-
   void showRequestsDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
             child: Column(
@@ -532,10 +547,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                 // Title
                 const Text(
                   "User Requests",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const SizedBox(height: 8),
 
@@ -551,8 +563,13 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                       final user = users[index];
                       return ListTile(
                         dense: true,
-                        visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        visualDensity: const VisualDensity(
+                          horizontal: -2,
+                          vertical: -2,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                        ),
                         leading: CachedCircleAvatar(
                           imageUrl: user.profilePic,
                           radius: 16,
@@ -560,14 +577,24 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                         ),
                         title: Text(
                           user.name,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Row(
                           children: [
-                            const Icon(Icons.diamond, size: 12, color: Colors.blue),
+                            const Icon(
+                              Icons.diamond,
+                              size: 12,
+                              color: Colors.blue,
+                            ),
                             const SizedBox(width: 4),
-                            Text("${user.diamond}", style: const TextStyle(fontSize: 12)),
+                            Text(
+                              "${user.diamond}",
+                              style: const TextStyle(fontSize: 12),
+                            ),
                           ],
                         ),
                         trailing: Row(
@@ -577,15 +604,21 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                               iconSize: 20,
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              icon: const Icon(Icons.check_circle, color: Colors.green),
+                              icon: const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                              ),
                               onPressed: () {
-
                                 users.remove(user);
-                                SocketService.instance.joinRequestAccepted(user);
+                                SocketService.instance.joinRequestAccepted(
+                                  user,
+                                );
 
                                 Navigator.pop(context);
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text("Accepted ${user.name}")),
+                                  SnackBar(
+                                    content: Text("Accepted ${user.name}"),
+                                  ),
                                 );
                               },
                             ),
@@ -598,7 +631,9 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                               onPressed: () {
                                 Navigator.pop(context);
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text("Deleted ${user.name}")),
+                                  SnackBar(
+                                    content: Text("Deleted ${user.name}"),
+                                  ),
                                 );
                               },
                             ),
@@ -625,7 +660,6 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
       },
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -727,92 +761,143 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
 
             if (isStreaming) ...[
               Positioned(
-                top: 20,
-                left: 16,
-                right: 16,
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    // Vertically center everything
-                    children: [
-                      GestureDetector(
-                        onTap: () async {
-                          final tappedUserId = session.hosts.first.userId;
-                          if (tappedUserId == SocketService.instance.userId) {
-                            return;
-                          }
-                          try {
-                            UserStats stats = await ApiService.getApiClient().getUserStats(tappedUserId);
-                            UserProfile profile =
-                                await ApiService.getApiClient().getUserProfile(
-                                  tappedUserId,
-                                );
-                            profile.stats = stats;
-                            Utils.showMiniProfileDialog(userProfile: profile,context:  context);
-                          } catch (e) {
-                            print("Error loading profile: $e");
-                          }
-                        },
-                        child: CachedCircleAvatar(
-                          imageUrl: profilePicture,
-                          user: Variables.currentUser?.settings,
-                          radius: 10,
-                        ),
+                top: 0,
+                left: 4,
+                right: 4,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    /// Host avatar
+                    GestureDetector(
+                      onTap: () async {
+                        final tappedUserId = session.hosts.first.userId;
+                        if (tappedUserId == SocketService.instance.userId)
+                          return;
+
+                        try {
+                          final stats = await ApiService.getApiClient()
+                              .getUserStats(tappedUserId);
+                          final profile = await ApiService.getApiClient()
+                              .getUserProfile(tappedUserId);
+                          profile.stats = stats;
+
+                          Utils.showMiniProfileDialog(
+                            userProfile: profile,
+                            context: context,
+                          );
+                        } catch (e) {
+                          debugPrint("Error loading profile: $e");
+                        }
+                      },
+                      child: CachedCircleAvatar(
+                        imageUrl: Variables.currentUser?.profilePic,
+                        user: Variables.currentUser?.settings,
+                        radius: 20,
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          // Prevent vertical stretch
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              liveName,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.remove_red_eye,
-                                  size: 14,
-                                  color: Colors.white70,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  "$viewerCount viewers",
+                    ),
+
+                    const SizedBox(width: 6),
+
+                    /// Name + viewers + list
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          /// Name + viewer count (same row)
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  liveName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
                                   ),
                                 ),
-                              ],
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(
+                                Icons.remove_red_eye,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                "$viewerCount",
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 4),
+
+                          /// Horizontal ListView (below name)
+                          SizedBox(
+                            height: 28,
+                            child: ListView.separated(
+                              padding: EdgeInsets.zero,
+                              scrollDirection: Axis.horizontal,
+                              itemCount: list.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 1),
+                              itemBuilder: (context, index) {
+                                final user = list[index];
+                                return SizedBox(
+                                  width: 28, // radius * 2
+                                  child: CachedCircleAvatar(
+                                    imageUrl: user.user.profilePic,
+                                    user: user.user.settings,
+                                    radius: 14,
+                                  ),
+                                );
+                              },
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: _onClosePressed,
+                    ),
+
+                    const SizedBox(width: 6),
+
+                    /// Compact close button
+                    InkWell(
+                      onTap: _onClosePressed,
+                      borderRadius: BorderRadius.circular(16),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.close, color: Colors.white, size: 20),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
+
               if (showCommentList)
                 Positioned(
                   left: 0,
                   bottom: keyboardHeight + 60,
-                  height: MediaQuery.of(context).size.height * 0.3,
+                  height: isParticipantAvail
+                      ? MediaQuery.of(context).size.height * 0.2
+                      : MediaQuery.of(context).size.height * 0.3,
                   width: MediaQuery.of(context).size.width * 0.8,
                   child: CommentList(
                     comments: comments,
                     isHost: true,
-                    onMuteUser: (s) => _muteUser(s),
+                    onMuteUser: (s) {
+                      if (mutedUsers.contains(s)) {
+                        mutedUsers.remove(s);
+                        _unmuteUser(s);
+                      } else {
+                        _muteUser(s);
+                      }
+                    },
                     onKickUser: (s) => _kickUser(s),
                   ),
                 ),
@@ -870,13 +955,19 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                         //   tooltip: "Add People",
                         // ),
                         IconButton(
-                            onPressed: (){
-                              setState(() {
-                                isBeautyEnabled = !isBeautyEnabled;
-                              });
-                              GenericStreamService.toggleBeauty();
-                            },
-                            icon: Icon(isBeautyEnabled?Icons.face_retouching_natural:Icons.face_outlined , color: Colors.white,)),
+                          onPressed: () {
+                            setState(() {
+                              isBeautyEnabled = !isBeautyEnabled;
+                            });
+                            GenericStreamService.toggleBeauty();
+                          },
+                          icon: Icon(
+                            isBeautyEnabled
+                                ? Icons.face_retouching_natural
+                                : Icons.face_outlined,
+                            color: Colors.white,
+                          ),
+                        ),
                         Stack(
                           children: [
                             IconButton(
@@ -908,7 +999,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                                 ),
                               ),
                           ],
-                        )
+                        ),
                       ],
                     ),
                   ),
@@ -953,9 +1044,8 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                         ),
                       ),
 
-
                       IconButton(
-                        onPressed:(){
+                        onPressed: () {
                           setState(() {
                             hasNotification1 = false;
                           });

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -14,22 +15,34 @@ import 'package:svgaplayer_flutter/proto/svga.pb.dart';
 
 import '../models/collection_name_request.dart';
 import '../models/friend_user_model.dart';
+import '../models/gift.dart';
+import '../models/live_gift.dart';
 import '../models/live_user.dart';
 import '../models/settings_model.dart';
 import '../models/user_profile.dart';
 import '../models/user_relations_dto.dart' hide UserRelation;
+import '../ui/decorated_participant_view.dart';
+import '../ui/gift_dialog.dart';
 import '../ui/mini_user_profile_dialog.dart';
 import '../ui/one_to_one_chat.dart';
 import '../ui/svga_overlay.dart';
 import 'api_service.dart';
 
 class Utils{
-  static showToast(BuildContext context,String message){
+  static showSnackbar(BuildContext context,String message){
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
   }
 
+
+  static showToast(String message){
+    Fluttertoast.showToast(
+      msg: message,
+      toastLength: Toast.LENGTH_SHORT,
+      gravity: ToastGravity.BOTTOM,
+    );
+  }
   static void copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
   }
@@ -248,6 +261,48 @@ class Utils{
 
 
 
+  static Widget getParticipant(BuildContext context,String userID, UserProfile userProfile,String sessionId){
+    return DecoratedParticipantView(
+      streamUrl: "${Variables.RTMP_URL}/$userID",
+      avatarUrl: userProfile.profilePic,
+      liveUser: userProfile,
+      onProfileTap:() async {
+        UserStats stats = await ApiService.getApiClient()
+            .getUserStats(userID);
+        UserProfile profile = await ApiService.getApiClient()
+            .getUserProfile(userID);
+        profile.stats = stats;
+        Utils.showMiniProfileDialog(userProfile: profile, context: context);
+      } ,
+      onGiftTap: (){
+        Utils.showGiftDialog(context,userID,sessionId);
+      },
+      overlayText: userProfile.name,
+    );
+  }
+
+
+
+  static void showGiftDialog(BuildContext context,String toUserId, String sessionId) {
+    showDialog(
+      context: context,
+      builder: (_) => GiftDialog(
+        onGiftClick: (gift) {
+          _sendGift(gift, toUserId,sessionId);
+        },
+      ),
+    );
+  }
+
+
+  static void _sendGift(Gift gift, String toUserId,String sessionId) {
+    LiveGift liveGift = LiveGift(
+      toUserId: toUserId,
+      sessionId: sessionId,
+      giftId: gift.id,
+    );
+    SocketService.instance.sendGift(liveGift);
+  }
 
   static String getActiveCollectionId(Map<String,dynamic>map, String activeCollection){
     final activeFrameId = map['active']?[activeCollection];
@@ -361,7 +416,6 @@ class Utils{
 
   static void handleUserJoined(BuildContext context, UserProfile user) {
     final overlay = Overlay.of(context);
-    if (overlay == null) return;
 
     final overlayEntry = OverlayEntry(
       builder: (context) {

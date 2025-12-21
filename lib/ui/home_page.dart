@@ -49,7 +49,7 @@ class _HomePageState extends State<HomePage> {
         GenericStreamService.initialize();
       },
       onDenied: () {
-        Utils.showToast(context, "Permission Denied");
+        Utils.showSnackbar(context, "Permission Denied");
       },
     );
     _initSocket();
@@ -65,7 +65,7 @@ class _HomePageState extends State<HomePage> {
       UserProfile profile = await ApiService.getApiClient().getMyProfile();
       if(profile.isBlocked){
         await FlutterSecureStorage().delete(key: 'access_token');
-        Utils.showToast(context, "Your account is blocked");
+        Utils.showSnackbar(context, "Your account is blocked");
         Navigator.pop(context);
         Navigator.push(
           context,

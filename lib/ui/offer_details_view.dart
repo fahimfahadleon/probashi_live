@@ -45,7 +45,7 @@ class _OfferListViewState extends State<OfferListView> {
       });
     } catch (e) {
       setState(() => _loading = false);
-      Utils.showToast(context, "Failed to load offers");
+      Utils.showSnackbar(context, "Failed to load offers");
     }
   }
 
@@ -93,7 +93,7 @@ class _OfferListViewState extends State<OfferListView> {
                             setState(() {
                               selectedGatewayIndex = value;
                               Utils.copyToClipboard(gateways[value].phone);
-                              Utils.showToast(context, "Phone Number Copied!");
+                              Utils.showSnackbar(context, "Phone Number Copied!");
                             });
                           }
                         },
@@ -137,7 +137,7 @@ class _OfferListViewState extends State<OfferListView> {
                     final phoneForPayment = selectedGateway.phone;
 
                     if (txn.isEmpty || methodName.isEmpty) {
-                      Utils.showToast(context, "Transaction ID and payment method are required");
+                      Utils.showSnackbar(context, "Transaction ID and payment method are required");
                       return;
                     }
 
@@ -154,11 +154,11 @@ class _OfferListViewState extends State<OfferListView> {
                     try {
                       await ApiService.getApiClient().requestPayment(payment);
                       Navigator.pop(context);
-                      Utils.showToast(context, "Payment request is successful");
+                      Utils.showSnackbar(context, "Payment request is successful");
                     } catch (e) {
                       debugPrint('Payment error: $e');
                       setState(() => isLoading = false);
-                      Utils.showToast(context, "Failed to submit payment request");
+                      Utils.showSnackbar(context, "Failed to submit payment request");
                     }
                   },
                   child: const Text("Submit"),

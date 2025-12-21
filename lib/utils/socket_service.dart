@@ -3,7 +3,6 @@
 
 import 'package:probashi_live/models/join_request_accepted.dart';
 import 'package:probashi_live/models/user_profile.dart';
-import 'package:probashi_live/utils/utils.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:probashi_live/utils/variables.dart';
 
@@ -130,13 +129,16 @@ class SocketService {
   }
 
   /// Kick participant by userId
-  void kickParticipant(String userId) {
-    socket.emit('kick_participant', {'userId': userId});
+  void kickAudience(String userId) {
+    socket.emit('kick_audience', {'userId': userId, 'sessionId': currentSessionId});
   }
 
   /// Mute participant by userId
-  void muteParticipant(String userId) {
-    socket.emit('mute_participant', {'userId': userId});
+  void muteAudience(String userId) {
+    socket.emit('mute_audience', {'userId': userId, 'sessionId': currentSessionId});
+  }  /// Mute participant by userId
+  void unMuteAudience(String userId) {
+    socket.emit('unmute_audience', {'userId': userId, 'sessionId': currentSessionId});
   }
 
   /// Request list of active live sessions (endedAt == null)
@@ -177,13 +179,23 @@ class SocketService {
     });
   }
 
+  void audienceLeave(){
+    if (!isConnected || currentSessionId == null || userId.isEmpty) {
+      print("Something went wrong.");
+      return;
+    }
+    socket.emit('leave_audience', {
+      'userId': userId,
+     'sessionId': currentSessionId,
+    });
+  }
+
   void sendGift(LiveGift gift) {
     if (!isConnected || currentSessionId == null || userId.isEmpty) {
       print("Cannot send gift: Missing session or user info");
       return;
     }
     socket.emit('send_gift', gift.toJson());
-    print("Gift sent: ${gift.toJson().toString()}");
   }
 
   void getChatInbox() {
@@ -277,6 +289,21 @@ class SocketService {
   void Function(LiveSession)? _participantLiveStartedCallback;
   void Function(LiveSession)? _getLiveDetails;
   void Function(JoinRequestAccepted)? _onInvitationAccepted;
+  void Function(Map<String, dynamic>)?_onKickAudience;
+  void Function(Map<String, dynamic>)?_onMuteAudience;
+  void Function(Map<String, dynamic>)?_onUnMuteAudience;
+
+
+  void onAudienceUnMute(void Function(Map<String, dynamic>) param0) {
+    _onUnMuteAudience = param0;
+  }
+
+  void onAudienceKicked(void Function(Map<String, dynamic>) callback) {
+    _onKickAudience = callback;
+  }
+  void onAudienceMuted(void Function(Map<String, dynamic>) callback) {
+    _onMuteAudience = callback;
+  }
   void onLiveDetailData(void Function(LiveSession) callback) {
     _getLiveDetails = callback;
   }
@@ -383,6 +410,18 @@ class SocketService {
       if (data['userId'] != null) {
         userId = data['userId'];
       }
+    });
+
+    socket.on('kicked_from_session', (data){
+      _onKickAudience?.call(data);
+    });
+
+    socket.on('unmuted_audience', (data){
+      _onUnMuteAudience?.call(data);
+    });
+
+    socket.on('muted_from_session', (data){
+      _onMuteAudience?.call(data);
     });
 
     socket.on('participant_live_started', (data){
@@ -544,4 +583,6 @@ class SocketService {
     }
     socket.emit('join_request_accepted',{'userId': user.id, 'sessionId': currentSessionId, 'fromUser': userId});
   }
+
+
 }

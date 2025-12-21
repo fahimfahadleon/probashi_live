@@ -175,7 +175,7 @@ class _GiftDialogState extends State<GiftDialog> with TickerProviderStateMixin {
                                   widget.onGiftClick?.call(gift);
                                   Navigator.pop(context);
                                 } else {
-                                  Utils.showToast(context, "Not enough diamonds.");
+                                  Utils.showSnackbar(context, "Not enough diamonds.");
                                 }
                               },
                               onLongPress: () => _showSVGAPreview(gift.imageUrl),

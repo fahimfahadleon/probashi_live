@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:probashi_live/models/collections_category.dart';
 import 'package:probashi_live/ui/cached_network_box_image.dart';
 import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
-import '../models/gift_category.dart';
 import '../models/parchase_collection.dart';
 import '../models/user_profile.dart';
 import '../utils/api_service.dart';
@@ -32,7 +31,7 @@ class _VipControllersState extends State<VipControllers>
   Future<void> purchaseCollection(PurchaseCollectionRequest body) async {
     UserProfile userProfile = await ApiService.getApiClient().purchaseCollection(body);
     Variables.currentUser = userProfile;
-    Utils.showToast(context, "Collection purchased successfully");
+    Utils.showSnackbar(context, "Collection purchased successfully");
     setState(() {});
   }
 
@@ -226,7 +225,7 @@ class _VipControllersState extends State<VipControllers>
                                             );
                                         purchaseCollection(body);
                                       } else {
-                                        Utils.showToast(
+                                        Utils.showSnackbar(
                                           context,
                                           "Not enough diamonds.",
                                         );

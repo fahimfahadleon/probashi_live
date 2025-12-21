@@ -44,12 +44,12 @@ class SocialLoginPage extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const HomePage()),
           );
         } else {
-          Utils.showToast(context, "Login Failed!");
+          Utils.showSnackbar(context, "Login Failed!");
 
         }
       } else {
         print("Token null");
-        Utils.showToast(context, "Google Sign-In failed");
+        Utils.showSnackbar(context, "Google Sign-In failed");
       }
     }
 

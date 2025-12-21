@@ -5,7 +5,6 @@ import 'package:svgaplayer_flutter/player.dart';
 import 'package:svgaplayer_flutter/proto/svga.pb.dart';
 
 import '../utils/utils.dart';
-import '../utils/variables.dart';
 
 
 class CachedCircleAvatar extends StatefulWidget {

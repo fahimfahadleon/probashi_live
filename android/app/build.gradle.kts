@@ -36,7 +36,7 @@ android {
 
 
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
@@ -61,6 +61,15 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
             isDebuggable = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+
+            ndk.abiFilters.clear()
+            // Set your custom filters.
+            ndk.abiFilters.addAll(listOf("arm64-v8a"))
+
         }
     }
 

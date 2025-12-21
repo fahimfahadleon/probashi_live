@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:probashi_live/models/user_profile.dart';
 import 'package:probashi_live/ui/cached_circle_avatar.dart';
+import '../utils/variables.dart';
 import 'participant_video_widget.dart'; // adjust the import path as needed
 
 class DecoratedParticipantView extends StatefulWidget {
@@ -23,12 +24,14 @@ class DecoratedParticipantView extends StatefulWidget {
   });
 
   @override
-  State<DecoratedParticipantView> createState() => _DecoratedParticipantViewState();
+  State<DecoratedParticipantView> createState() =>
+      _DecoratedParticipantViewState();
 }
 
 class _DecoratedParticipantViewState extends State<DecoratedParticipantView> {
   bool _showTextField = false;
   Timer? _hideTimer;
+  bool showGift = true;
 
   void _handleAvatarTap() {
     if (_showTextField) {
@@ -50,6 +53,9 @@ class _DecoratedParticipantViewState extends State<DecoratedParticipantView> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.liveUser.id == Variables.currentUser!.id) {
+      showGift = false;
+    }
     return AspectRatio(
       aspectRatio: 9 / 16,
       child: ClipRRect(
@@ -67,7 +73,11 @@ class _DecoratedParticipantViewState extends State<DecoratedParticipantView> {
               left: 8,
               child: GestureDetector(
                 onTap: _handleAvatarTap,
-                child: CachedCircleAvatar(imageUrl: widget.avatarUrl,radius: 15, user: widget.liveUser.settings),
+                child: CachedCircleAvatar(
+                  imageUrl: widget.avatarUrl,
+                  radius: 15,
+                  user: widget.liveUser.settings,
+                ),
               ),
             ),
 
@@ -78,9 +88,14 @@ class _DecoratedParticipantViewState extends State<DecoratedParticipantView> {
                 left: 52,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: (0.6 * 255).toDouble()),
+                    color: Colors.black.withValues(
+                      alpha: (0.6 * 255).toDouble(),
+                    ),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -93,18 +108,19 @@ class _DecoratedParticipantViewState extends State<DecoratedParticipantView> {
               ),
 
             // Gift icon at bottom-right
-            Positioned(
-              bottom: 8,
-              right: 8,
-              child: GestureDetector(
-                onTap: widget.onGiftTap,
-                child: const Icon(
-                  Icons.card_giftcard,
-                  color: Colors.white,
-                  size: 28,
+            if (showGift)
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: widget.onGiftTap,
+                  child: const Icon(
+                    Icons.card_giftcard,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),

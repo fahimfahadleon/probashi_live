@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:probashi_live/models/live_session.dart';
 import 'package:probashi_live/ui/comment_list.dart';
-import 'package:probashi_live/ui/participant_video_widget.dart';
 import 'package:svgaplayer_flutter/player.dart';
 
 import '../models/gift.dart';
@@ -50,6 +49,7 @@ class _ParticipantPageState extends State<ParticipantPage>
   final List<LiveComment> comments = [];
   late List<LiveUser> participants = [];
   int viewerCount = 0;
+  List<LiveUser>list = [];
   late String profilePicture =
       "https://api.dicebear.com/7.x/identicon/png?seed=default";
 
@@ -57,7 +57,7 @@ class _ParticipantPageState extends State<ParticipantPage>
   bool _showGiftAnimation = false;
   String _giftSenderName = '';
   String _giftReceiverName = '';
-
+bool isParticipantAvail = false;
   @override
   void initState() {
     super.initState();
@@ -141,22 +141,20 @@ class _ParticipantPageState extends State<ParticipantPage>
         });
 
         SocketService.instance.onAudienceJoined((audienceUser) {
-          setState(() {
-            viewerCount++;
-            // Optionally store them somewhere or show UI
-          });
+
         });
         SocketService.instance.onAudienceLeft((callback) {
-          setState(() {
-            viewerCount--;
-            // Optionally store them somewhere or show UI
-          });
+
         });
 
         SocketService.instance.onSessionUpdated((updatedSession) {
-          session = updatedSession;
-          print("session2: ${session.toJson()}");
           setState(() {
+            session = updatedSession;
+            viewerCount = updatedSession.audience.length;
+            list = [
+              ...updatedSession.audience.where((u) => u.user.vipStatus),
+              ...updatedSession.audience.where((u) => !u.user.vipStatus),
+            ];
             participants = Utils.addLiveUsersWithoutDuplicates(
               participants,
               session.participants,
@@ -167,7 +165,7 @@ class _ParticipantPageState extends State<ParticipantPage>
         SocketService.instance.onLiveEnded((sessionData) {
           if (mounted) {
             GenericStreamService.stopStream();
-            Utils.showToast(context, "Live ended");
+            Utils.showSnackbar(context, "Live ended");
             Navigator.pop(context);
           }
         });
@@ -187,7 +185,7 @@ class _ParticipantPageState extends State<ParticipantPage>
       },
       onDenied: () {
         SocketService.instance.cancelInvite(fromUserId: widget.from, toUserId:widget.to, sessionId: widget.sessionId);
-        Utils.showToast(context, "Permission Denied");
+        Utils.showSnackbar(context, "Permission Denied");
         Navigator.pop(context);
       },
     );
@@ -273,6 +271,7 @@ class _ParticipantPageState extends State<ParticipantPage>
 
   Widget _buildStreamGrid() {
     String hostId = session.hosts.first.user.id;
+    UserProfile hostUserProfile = session.hosts.first.user;
     final guestParticipants = participants
         .where((user) => user.userId != SocketService.instance.userId)
         .toList(); // Only up to 4 guests
@@ -286,9 +285,7 @@ class _ParticipantPageState extends State<ParticipantPage>
             aspectRatio: 9 / 16,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
-              child: ParticipantVideoWidget(
-                streamUrl: "${Variables.RTMP_URL}/$hostId",
-              ),
+              child: Utils.getParticipant(context, hostId, hostUserProfile, widget.sessionId)
             ),
           ),
         ),
@@ -311,17 +308,23 @@ class _ParticipantPageState extends State<ParticipantPage>
     );
 
     // --- Bottom Guest Row (up to 4 guests) ---
+
+
+
+    if(guestParticipants.isNotEmpty){
+      isParticipantAvail = true;
+    }else{
+      isParticipantAvail = false;
+    }
+
     final guestRow = Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: List.generate(4, (index) {
         if (index < guestParticipants.length) {
           final p = guestParticipants[index];
           final userId = p.userId;
+          final userProfile = p.user;
 
-          String streamUrl = "${Variables.RTMP_URL}/$userId";
-          //rtmp://192.168.11.4:1935/live/114806937760278912062
-          //rtmp://192.168.11.4:1935/live/114806937760278912062
-          print("Stream Url: $streamUrl");
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.all(4.0),
@@ -329,7 +332,7 @@ class _ParticipantPageState extends State<ParticipantPage>
                 aspectRatio: 9 / 16,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16.0),
-                  child: ParticipantVideoWidget(streamUrl: streamUrl),
+                  child: Utils.getParticipant(context, userId, userProfile, widget.sessionId)
                 ),
               ),
             ),
@@ -471,9 +474,9 @@ class _ParticipantPageState extends State<ParticipantPage>
 
           if (isStreaming) ...[
             Positioned(
-              top: 20,
-              left: 16,
-              right: 16,
+              top: 0,
+              left: 4,
+              right: 4,
               child: IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -482,15 +485,16 @@ class _ParticipantPageState extends State<ParticipantPage>
                     GestureDetector(
                       onTap: () async {
                         final tappedUserId = session.hosts.first.userId;
-                        if (tappedUserId == SocketService.instance.userId)
+                        if (tappedUserId == SocketService.instance.userId) {
                           return;
+                        }
                         try {
                           UserStats stats = await ApiService.getApiClient()
                               .getUserStats(tappedUserId);
                           UserProfile profile = await ApiService.getApiClient()
                               .getUserProfile(tappedUserId);
                           profile.stats = stats;
-                          Utils.showMiniProfileDialog(userProfile: profile,context:  context);
+                          Utils.showMiniProfileDialog(userProfile: profile,context: context);
                         } catch (e) {
                           print("Error loading profile: $e");
                         }
@@ -504,20 +508,25 @@ class _ParticipantPageState extends State<ParticipantPage>
                     const SizedBox(width: 6),
                     Expanded(
                       child: Column(
-                        mainAxisSize: MainAxisSize.min, // Prevent stretching
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            liveName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
+                          /// Name + viewer count (same row)
                           Row(
                             children: [
+                              Flexible(
+                                child: Text(
+                                  liveName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
                               const Icon(
                                 Icons.remove_red_eye,
                                 size: 14,
@@ -525,7 +534,7 @@ class _ParticipantPageState extends State<ParticipantPage>
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                "$viewerCount viewers",
+                                "$viewerCount",
                                 style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 12,
@@ -533,12 +542,42 @@ class _ParticipantPageState extends State<ParticipantPage>
                               ),
                             ],
                           ),
+
+                          const SizedBox(height: 4),
+
+                          /// Horizontal ListView (below name)
+                          SizedBox(
+                            height: 28,
+                            child: ListView.separated(
+                              padding: EdgeInsets.zero,
+                              scrollDirection: Axis.horizontal,
+                              itemCount: list.length,
+                              separatorBuilder: (_, __) =>
+                              const SizedBox(width: 1),
+                              itemBuilder: (context, index) {
+                                final user = list[index];
+                                return SizedBox(
+                                  width: 28, // radius * 2
+                                  child: CachedCircleAvatar(
+                                    imageUrl: user.user.profilePic,
+                                    user: user.user.settings,
+                                    radius: 14,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: _onClosePressed,
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: _onClosePressed,
+                      borderRadius: BorderRadius.circular(16),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.close, color: Colors.white, size: 20),
+                      ),
                     ),
                   ],
                 ),
@@ -549,7 +588,7 @@ class _ParticipantPageState extends State<ParticipantPage>
               Positioned(
                 left: 0,
                 bottom: keyboardHeight + 60,
-                height: MediaQuery.of(context).size.height * 0.3,
+                height: isParticipantAvail?MediaQuery.of(context).size.height * 0.2 : MediaQuery.of(context).size.height * 0.3,
                 width: MediaQuery.of(context).size.width * 0.8,
                 child: CommentList(comments: comments),
               ),

@@ -76,7 +76,7 @@ class _CoinSellerPageState extends State<CoinSellerPage> {
         }
       }
 
-      Utils.showToast(context, 'Failed to load seller info');
+      Utils.showSnackbar(context, 'Failed to load seller info');
       setState(() => _status = CoinSellerStatus.notApplied);
     }
   }
@@ -106,11 +106,11 @@ class _CoinSellerPageState extends State<CoinSellerPage> {
         email: email,
       );
       await ApiService.getApiClient().applyAsCoinSeller(request);
-      Utils.showToast(context, 'Application submitted successfully!');
+      Utils.showSnackbar(context, 'Application submitted successfully!');
       setState(() => _status = CoinSellerStatus.pending);
     } catch (e) {
       debugPrint('Error registering seller: $e');
-      Utils.showToast(context, 'Registration failed');
+      Utils.showSnackbar(context, 'Registration failed');
     } finally {
       setState(() => _isSubmitting = false);
     }
@@ -139,7 +139,7 @@ class _CoinSellerPageState extends State<CoinSellerPage> {
 
     int? amount = int.tryParse(_amountController.text);
     if (amount == null) {
-      Utils.showToast(context, 'Invalid amount:');
+      Utils.showSnackbar(context, 'Invalid amount:');
       throw Exception('Invalid amount: ${_amountController.text}');
     }
     SendCoinsRequest request = SendCoinsRequest(
@@ -153,10 +153,10 @@ class _CoinSellerPageState extends State<CoinSellerPage> {
       await ApiService.getApiClient().sendCoins(request);
     } catch (e) {
       print(e);
-      Utils.showToast(context, "Failed to send coins");
+      Utils.showSnackbar(context, "Failed to send coins");
     }
 
-    Utils.showToast(
+    Utils.showSnackbar(
       context,
       'Successfully sent ${_amountController.text} coins to ${_foundRecipient!.name}',
     );
@@ -422,7 +422,7 @@ class _CoinSellerPageState extends State<CoinSellerPage> {
                 ),
                 trailing: ElevatedButton(
                   onPressed: () {
-                    Utils.showToast(context, 'Buying pack ${pack.id}');
+                    Utils.showSnackbar(context, 'Buying pack ${pack.id}');
                   },
                   child: const Text('Buy'),
                 ),

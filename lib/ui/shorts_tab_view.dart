@@ -6,7 +6,7 @@ class ShortsTabView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Text("Shorts", style: TextStyle(color: Colors.white)),
+      child: Text("Coming Soon", style: TextStyle(color: Colors.white)),
     );
   }
 }

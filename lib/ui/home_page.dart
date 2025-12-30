@@ -46,7 +46,7 @@ class _HomePageState extends State<HomePage> {
     PermissionService.requestPermission(
       context,
       onGranted: () {
-        GenericStreamService.initialize();
+       // GenericStreamService.initialize();
       },
       onDenied: () {
         Utils.showSnackbar(context, "Permission Denied");

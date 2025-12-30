@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svga/flutter_svga.dart';
 import 'package:probashi_live/models/collections_category.dart';
 import 'package:probashi_live/ui/cached_network_box_image.dart';
-import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
 import '../models/parchase_collection.dart';
 import '../models/user_profile.dart';
 import '../utils/api_service.dart';

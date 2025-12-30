@@ -1,13 +1,12 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
-import 'package:probashi_live/models/live_session.dart';
-import 'package:probashi_live/ui/comment_list.dart';
-import 'package:svgaplayer_flutter/player.dart';
+import 'dart:async';
+import 'dart:math';
 
-import '../models/friend_user_model.dart';
+import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter_svga/flutter_svga.dart';
+import 'package:probashi_live/models/live_session.dart';
+import 'package:probashi_live/models/webrtc_response.dart';
+import 'package:probashi_live/ui/comment_list.dart';
+
 import '../models/gift.dart';
 import '../models/user_profile.dart';
 import '../services/generic_system_service.dart';
@@ -16,8 +15,9 @@ import '../utils/permission_service.dart';
 import '../utils/socket_service.dart';
 import '../utils/utils.dart';
 import '../utils/variables.dart';
+import 'package:livekit_client/livekit_client.dart';
 
-import '../models/live_comment.dart'; // your model imports
+import '../models/live_comment.dart';
 import '../models/live_user.dart';
 import 'cached_circle_avatar.dart';
 
@@ -39,12 +39,15 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   bool hasNotification = false;
   bool hasNotification1 = false;
   late LiveSession session;
-  bool isBeautyEnabled = false;
   late String liveName = "default name";
+  bool _isReconnecting = false;
+  int _reconnectAttempts = 0;
+  final int _maxReconnectAttempts = 3;
+  ConnectionQuality _connectionQuality = ConnectionQuality.unknown;
 
   final TextEditingController _chatController = TextEditingController();
   final List<LiveComment> comments = [];
-  final List<LiveUser> participants = [];
+  late List<LiveUser> participants = [];
   final List<UserProfile> users = [];
   int viewerCount = 0;
   late String profilePicture =
@@ -57,6 +60,19 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
   bool isParticipantAvail = false;
   List<String> mutedUsers = [];
   List<LiveUser> list = [];
+  late EventsListener<RoomEvent> _roomListener;
+
+  // LiveKit variables
+  late Room _room;
+  LocalVideoTrack? _localVideoTrack;
+  LocalAudioTrack? _localAudioTrack;
+
+  // Remote participants - only those who are PUBLISHING video/audio
+  final List<RemoteParticipant> _publishingParticipants = [];
+  final Map<String, VideoTrack> _remoteVideoTracks = {};
+
+  // All remote users (including audience - for tracking purposes only)
+  final Map<String, RemoteParticipant> _allRemoteUsers = {};
 
   @override
   void initState() {
@@ -65,14 +81,17 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     PermissionService.requestPermission(
       context,
       onGranted: () {
-        GenericStreamService.initialize();
-
         _svgaController = SVGAAnimationController(vsync: this);
+        _initializeLiveKit();
 
         SocketService.instance.onGiftReceived((gift1) async {
           final gift = Gift.fromJson(gift1['gift']);
           final fromUser = UserProfile.fromJson(gift1['fromUser']);
           final toUser = UserProfile.fromJson(gift1['toUser']);
+
+          if(toUser.id == Variables.currentUser!.id){
+            Utils.updateProfile();
+          }
 
           final url = Variables.BASE_URL + gift.imageUrl;
           final videoItem = await Utils.getCachedSvga(url);
@@ -118,38 +137,13 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
             });
           }
         });
-        SocketService.instance.onParticipantJoined((participant) {
-          // setState(() => participants.add(participant));
-        });
-        SocketService.instance.onParticipantLeft((participant) {
-          setState(() {
-            participants.removeWhere((p) => p.user.id == participant.user.id);
-          });
-        });
-
-        SocketService.instance.onAudienceJoined((audienceUser) {});
-        SocketService.instance.onAudienceLeft((callback) {});
 
         SocketService.instance.onSessionUpdated((updatedSession) {
-          final updated = updatedSession.participants;
-
-          // Check if participant list actually changed
-          final isSameLength = participants.length == updated.length;
-          final isSameContent =
-              isSameLength &&
-              participants.every(
-                (p) => updated.any((u) => u.user.id == p.user.id),
-              );
-
-          if (!isSameLength || !isSameContent) {
-            setState(() {
-              participants
-                ..clear()
-                ..addAll(updated);
-            });
-          }
+          debugPrint("sessionUpdate ${updatedSession.toJson().toString()}");
+          // Simply replace the entire participants list
           setState(() {
             session = updatedSession;
+            participants = updatedSession.participants; // Direct assignment
             viewerCount = updatedSession.audience.length;
             list = [
               ...updatedSession.audience.where((u) => u.user.vipStatus),
@@ -159,21 +153,23 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
         });
 
         SocketService.instance.onLiveEnded((sessionData) {
-          if (mounted) {
-            GenericStreamService.stopStream();
-          }
+          // if (mounted) {
+          //   _endStream();
+          // }
         });
 
         SocketService.instance.onLiveStarted((sessionData) {
           setState(() {
-            session = sessionData;
-            liveName = sessionData.hosts.first.user.name;
-            profilePicture = sessionData.hosts.first.user.profilePic;
+            session = sessionData.fullSession;
+            liveName = sessionData.fullSession.hosts.first.user.name;
+            profilePicture =
+                sessionData.fullSession.hosts.first.user.profilePic;
           });
+          _connectAsHost(sessionData.webrtc.url, sessionData.webrtc.token);
         });
 
-        SocketService.instance.onFriendListCalled((friendList) {
-          showFriendInviteDialog(context, friendList);
+        SocketService.instance.onWebRTCResponse((data) {
+          WebRTCResponse response = data;
         });
 
         SocketService.instance.onAudienceRequested((data) {
@@ -199,75 +195,578 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     );
   }
 
-  void showFriendInviteDialog(
-    BuildContext context,
-    List<FriendUserModel> friendList,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Invite a Friend'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: friendList.length,
-            separatorBuilder: (_, __) => const Divider(),
+  void _initializeLiveKit() {
+    _room = Room();
+  }
+
+  Future<void> _connectAsHost(String url, String token) async {
+    if (isStreaming || !mounted) {
+      return;
+    }
+
+    try {
+      // Show loading state
+      setState(() {
+        isStreaming = true; // Set true immediately to show loading UI
+      });
+
+      final roomOptions = RoomOptions(
+        adaptiveStream: true,
+        dynacast: true,
+        stopLocalTrackOnUnpublish: true,
+      );
+      // Connect to LiveKit room
+      await _room.connect(url, token, roomOptions: roomOptions);
+
+      // Check if we have permission and context still valid
+      if (!mounted) return;
+
+      // Create camera track with front camera by default
+      final options = CameraCaptureOptions(
+        cameraPosition: isFrontCamera
+            ? CameraPosition.front
+            : CameraPosition.back,
+        maxFrameRate: 30,
+        stopCameraCaptureOnMute: true,
+      );
+
+      _localVideoTrack = await LocalVideoTrack.createCameraTrack(options);
+      _localAudioTrack = await LocalAudioTrack.create();
+
+      // Publish tracks
+      await _room.localParticipant?.publishVideoTrack(_localVideoTrack!);
+      await _room.localParticipant?.publishAudioTrack(_localAudioTrack!);
+
+      // Setup listeners after successful connection
+      _setupParticipantListeners();
+
+      debugPrint('WebRTC connected successfully');
+    } catch (e) {
+      debugPrint('Failed to connect: $e');
+      if (mounted) {
+        Utils.showSnackbar(context, "Failed to start stream: ${e.toString()}");
+        setState(() {
+          isStreaming = false;
+        });
+        // Consider going back if connection fails
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  void _setupParticipantListeners() {
+    _roomListener = _room.createListener();
+    final Set<String> listenedParticipantSids = {};
+
+    _roomListener
+      ..on<RoomConnectedEvent>((event) {
+        debugPrint('Room connected: ${event.room.name}');
+      })
+      ..on<RoomDisconnectedEvent>((event) {
+        debugPrint('Room disconnected: ${event.reason}');
+        if (mounted) {
+          setState(() {
+            isStreaming = false;
+            _publishingParticipants.clear();
+            _remoteVideoTracks.clear();
+            _allRemoteUsers.clear();
+          });
+        }
+      })
+
+      ..on<ParticipantConnectedEvent>((event) {
+        final participant = event.participant;
+        debugPrint('Participant connected: ${participant.identity}');
+
+        // Store all remote users
+        if (participant is RemoteParticipant) {
+          _allRemoteUsers[participant.identity] = participant;
+
+          // Only add listener if not already listening
+          if (!listenedParticipantSids.contains(participant.sid)) {
+            participant.addListener(() {
+              _onParticipantUpdate(participant);
+            });
+            listenedParticipantSids.add(participant.sid);
+          }
+        }
+      })
+      ..on<ParticipantDisconnectedEvent>((event) {
+        final participant = event.participant;
+        debugPrint('Participant disconnected: ${participant.identity}');
+
+        setState(() {
+          if (participant is RemoteParticipant) {
+            listenedParticipantSids.remove(participant.sid);
+            _allRemoteUsers.remove(participant.identity);
+            _publishingParticipants.remove(participant);
+            _remoteVideoTracks.remove(participant.sid);
+          }
+        });
+      })
+
+      ..on<TrackPublishedEvent>((event) {
+        final participant = event.participant;
+        final publication = event.publication;
+
+        debugPrint(
+          'Track published by ${participant.identity}: ${publication.kind}',
+        );
+
+        // When a participant publishes a track, add them to publishing list
+        if (participant is RemoteParticipant &&
+            !_publishingParticipants.contains(participant)) {
+          setState(() {
+            _publishingParticipants.add(participant);
+          });
+        }
+      })
+      ..on<TrackUnpublishedEvent>((event) {
+        final participant = event.participant;
+        final publication = event.publication;
+
+        debugPrint(
+          'Track unpublished by ${participant.identity}: ${publication.kind}',
+        );
+
+        // Check if participant still has any published tracks
+        if (participant is RemoteParticipant) {
+          final hasPublishedTracks =
+              participant.videoTrackPublications.any((p) => p.track != null) ||
+              participant.audioTrackPublications.any((p) => p.track != null);
+
+          if (!hasPublishedTracks &&
+              _publishingParticipants.contains(participant)) {
+            setState(() {
+              _publishingParticipants.remove(participant);
+              _remoteVideoTracks.remove(participant.sid);
+            });
+          }
+        }
+      })
+      ..on<TrackSubscribedEvent>((event) {
+        final track = event.track;
+        final participant = event.participant;
+
+        if (track.kind == TrackType.VIDEO && participant is RemoteParticipant) {
+          setState(() {
+            _remoteVideoTracks[participant.sid] = track as VideoTrack;
+          });
+        }
+      })
+      ..on<TrackUnsubscribedEvent>((event) {
+        final track = event.track;
+        final participant = event.participant;
+
+        if (track.kind == TrackType.VIDEO && participant is RemoteParticipant) {
+          setState(() {
+            _remoteVideoTracks.remove(participant.sid);
+          });
+        }
+      })
+      ..on<ParticipantConnectionQualityUpdatedEvent>((event) {
+        setState(() {
+          _connectionQuality = event.connectionQuality;
+        });
+      })
+      ..on<RoomReconnectingEvent>((event) {
+        if (mounted) {
+          setState(() {
+            _isReconnecting = true;
+            _reconnectAttempts++;
+          });
+
+          if (_reconnectAttempts >= _maxReconnectAttempts) {
+            _showReconnectFailedDialog();
+          }
+        }
+      })
+      ..on<RoomReconnectedEvent>((event) {
+        if (mounted) {
+          setState(() {
+            _isReconnecting = false;
+            _reconnectAttempts = 0;
+          });
+          Utils.showSnackbar(context, "Reconnected successfully");
+        }
+      });
+  }
+
+  void _onParticipantUpdate(Participant participant) {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Widget _buildLocalVideo(bool participantAdded) {
+    if (_localVideoTrack == null) {
+      return Container(
+        color: Colors.black,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Stack(
+      children: [
+        // Base video
+        VideoTrackRenderer(_localVideoTrack!),
+
+        // Overlay when participant is added
+        if (participantAdded)
+          Positioned(
+            top: 2,
+            left: 2,
+            child: Row(
+              children: [
+                CachedCircleAvatar(imageUrl: Variables.currentUser!.profilePic, user: Variables.currentUser!.settings),
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    Variables.currentUser!.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+
+
+  }
+
+  // Widget _buildRemoteVideo(String participantSid,String participantIdentity) {
+  //   final track = _remoteVideoTracks[participantSid];
+  //
+  //   LiveUser? participant = participants.firstWhere(
+  //         (p) => p.user.id == participantIdentity,
+  //   );
+  //
+  //   if (track == null) {
+  //     return Container(
+  //       color: Colors.grey[900],
+  //       child: const Center(child: Icon(Icons.person, color: Colors.white54)),
+  //     );
+  //   }
+  //
+  //
+  //   return Stack(
+  //     children: [
+  //       // Base video
+  //       VideoTrackRenderer(_localVideoTrack!),
+  //
+  //       // Overlay when participant is added
+  //
+  //       Positioned(
+  //         top: 12,
+  //         left: 12,
+  //         child: Row(
+  //           children: [
+  //             CachedCircleAvatar(imageUrl: participant.user.profilePic, user: participant.user.settings),
+  //             const SizedBox(width: 8),
+  //             Container(
+  //               padding:
+  //               const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+  //               decoration: BoxDecoration(
+  //                 color: Colors.black.withOpacity(0.6),
+  //                 borderRadius: BorderRadius.circular(12),
+  //               ),
+  //               child: Text(
+  //                 participant.user.name,
+  //                 style: const TextStyle(
+  //                   color: Colors.white,
+  //                   fontSize: 12,
+  //                   fontWeight: FontWeight.w500,
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
+  //
+  Widget _buildRemoteVideo(String participantSid, String participantIdentity) {
+    final track = _remoteVideoTracks[participantSid];
+
+    // Try to find participant in participants list
+    LiveUser? participant;
+    try {
+      participant = participants.firstWhere(
+            (p) => p.user.id == participantIdentity,
+      );
+    } catch (e) {
+      debugPrint('Participant not found in list: $participantIdentity');
+      // Fallback: just show video without overlay
+      if (track == null) {
+        return Container(
+          color: Colors.grey[900],
+          child: const Center(child: Icon(Icons.person, color: Colors.white54)),
+        );
+      }
+      return VideoTrackRenderer(track);
+    }
+
+    if (track == null) {
+      return Container(
+        color: Colors.grey[900],
+        child: const Center(child: Icon(Icons.person, color: Colors.white54)),
+      );
+    }
+
+    return Stack(
+      children: [
+        // Base video - FIXED: use track, not _localVideoTrack!
+        VideoTrackRenderer(track),
+
+        // Overlay when participant is added
+        Positioned(
+          top: 2,
+          left: 2,
+          child: Row(
+            children: [
+              CachedCircleAvatar(
+                  imageUrl: participant.user.profilePic,
+                  user: participant.user.settings
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  participant.user.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStreamGrid() {
+    // Participants with video
+    final videoParticipants = _publishingParticipants
+        .where((p) => _remoteVideoTracks.containsKey(p.sid))
+        .toList();
+
+    debugPrint('Publishing participants with video: ${videoParticipants.length}');
+
+    // No participants → host full screen (9:16)
+    if (videoParticipants.isEmpty) {
+      return AspectRatio(
+        aspectRatio: 9 / 16,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: _buildLocalVideo(false),
+        ),
+      );
+    }
+
+    // One participant → split screen (host + participant)
+    if (videoParticipants.length == 1) {
+      return Row(
+        children: [
+          Expanded(
+            child: AspectRatio(
+              aspectRatio: 9 / 16,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: _buildLocalVideo(true),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: AspectRatio(
+              aspectRatio: 9 / 16,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: _buildRemoteVideo(videoParticipants.first.sid, videoParticipants.first.identity),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // 2+ participants
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Top row: host + first participant
+        Row(
+          children: [
+            Expanded(
+              child: AspectRatio(
+                aspectRatio: 9 / 16,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: _buildLocalVideo(true),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: AspectRatio(
+                aspectRatio: 9 / 16,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: _buildRemoteVideo(videoParticipants.first.sid, videoParticipants.first.identity),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+
+        // Bottom row: remaining participants (scrollable)
+        SizedBox(
+          height: 120,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: videoParticipants.length - 1,
             itemBuilder: (context, index) {
-              final friend = friendList[index];
+              final participant = videoParticipants[index + 1];
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Row(
-                  children: [
-                    // Profile picture
-                    CachedCircleAvatar(
-                      imageUrl: friend.profilePic,
-                      radius: 10,
-                      user: friend.settings,
-                    ),
-                    const SizedBox(width: 12),
-
-                    // Name (takes available space)
-                    Expanded(
-                      child: Text(
-                        friend.name,
-                        style: const TextStyle(fontSize: 16),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-
-                    // VIP + Invite icon group
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (friend.vipStatus)
-                          const Icon(Icons.star, color: Colors.amber, size: 20),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.person_add_alt_1,
-                            color: Colors.blue,
-                          ),
-                          onPressed: () {
-                            SocketService.instance.inviteToJoinLive(
-                              fromUserId: SocketService.instance.userId,
-                              toUserId: friend.id,
-                              sessionId: session.id,
-                            );
-                            Navigator.pop(context);
-                            Utils.showSnackbar(
-                              context,
-                              "Invite sent to ${friend.name}",
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
+                padding: EdgeInsets.only(
+                  right: index < videoParticipants.length - 2 ? 4 : 0,
+                ),
+                child: AspectRatio(
+                  aspectRatio: 9 / 16,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: _buildRemoteVideo(participant.sid,participant.identity),
+                  ),
                 ),
               );
             },
           ),
         ),
+      ],
+    );
+  }
+
+
+  Widget _buildConnectionStatus() {
+    Color statusColor;
+    String statusText;
+
+    switch (_connectionQuality) {
+      case ConnectionQuality.excellent:
+        statusColor = Colors.green;
+        statusText = 'Excellent';
+      case ConnectionQuality.good:
+        statusColor = Colors.lightGreen;
+        statusText = 'Good';
+      case ConnectionQuality.poor:
+        statusColor = Colors.orange;
+        statusText = 'Poor';
+      default:
+        statusColor = Colors.grey;
+        statusText = 'Connecting...';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: statusColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            statusText,
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleMic() async {
+    if (_localAudioTrack != null) {
+      setState(() {
+        isMicOn = !isMicOn;
+      });
+      if (isMicOn) {
+        await _localAudioTrack!.unmute(stopOnMute: false);
+      } else {
+        await _localAudioTrack!.mute(stopOnMute: false);
+      }
+    }
+  }
+
+  void _toggleControlsPanel() {
+    setState(() => showControlsPanel = !showControlsPanel);
+  }
+
+  void _toggleCamera() async {
+    if (_localVideoTrack != null) {
+      setState(() {
+        isCameraOn = !isCameraOn;
+      });
+      if (isCameraOn) {
+        await _localVideoTrack!.unmute(stopOnMute: false);
+      } else {
+        await _localVideoTrack!.mute(stopOnMute: false);
+      }
+    }
+  }
+
+  void _switchCamera() async {
+    if (_localVideoTrack != null) {
+      try {
+        await _localVideoTrack!.switchCamera("");
+        setState(() {
+          isFrontCamera = !isFrontCamera;
+        });
+      } catch (e) {
+        debugPrint('Error switching camera: $e');
+      }
+    }
+  }
+
+  void _showReconnectFailedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("Connection Lost"),
+        content: const Text("Unable to reconnect to the stream."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text("OK"),
+          ),
+        ],
       ),
     );
   }
@@ -277,17 +776,17 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     super.didChangeDependencies();
     if (!_dialogShown) {
       _dialogShown = true;
-      Future.delayed(Duration.zero, () => _showConfirmationDialog());
+      Future.delayed(Duration.zero, () => _showStartLiveDialog());
     }
   }
 
-  Future<void> _showConfirmationDialog() async {
+  Future<void> _showStartLiveDialog() async {
     final confirm = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text("Start Live Stream?"),
-        content: const Text("Do you want to go live now?"),
+        content: const Text("Do you want to go live now with WebRTC?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -300,12 +799,11 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
         ],
       ),
     );
+
     if (confirm == true) {
-      final rtmpUrl = "${Variables.RTMP_URL}/${SocketService.instance.userId}";
-      GenericStreamService.startStream(rtmpUrl);
-      // GenericStreamService.switchCamera();
+      // Request WebRTC session from server
       SocketService.instance.goLive();
-      setState(() => isStreaming = true);
+      // The actual connection will happen in onLiveStarted callback
     } else {
       Navigator.of(context).pop();
     }
@@ -334,42 +832,84 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
 
   Future<void> _onClosePressed() async {
     if (await _confirmEndStream()) {
-      _endStream();
+      try {
+        await _endStream();
+      } catch (e) {
+        debugPrint('Error closing stream: $e');
+      }
     }
   }
 
-  void _endStream() {
-    GenericStreamService.stopStream();
-    SocketService.instance.leaveLive();
-    Navigator.pop(context);
-  }
+  Future<void> _endStream() async {
+    try {
+      // Unpublish and stop local tracks
+      if (_localVideoTrack != null) {
+        await _room.localParticipant?.unpublishAllTracks();
+        await _localVideoTrack!.stop();
+        _localVideoTrack = null;
+      }
+      if (_localAudioTrack != null) {
+        await _room.localParticipant?.unpublishAllTracks();
+        await _localAudioTrack!.stop();
+        _localAudioTrack = null;
+      }
 
-  void _sendComment() {
-    final msg = _chatController.text.trim();
-    if (msg.isNotEmpty) {
-      SocketService.instance.sendComment(msg);
-      _chatController.clear();
+      // Disconnect room
+      if (_room.connectionState == ConnectionState.connected) {
+        await _room.disconnect();
+      }
+
+      // Clear UI state safely
+      if (mounted) {
+        setState(() {
+          isStreaming = false;
+          _publishingParticipants.clear();
+          _remoteVideoTracks.clear();
+          _allRemoteUsers.clear();
+        });
+
+        // Notify server
+        SocketService.instance.leaveLive();
+
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      debugPrint('Error ending stream: $e');
     }
   }
 
-  void _toggleMic() async {
-    isMicOn = !isMicOn;
-    isMicOn
-        ? await GenericStreamService.unmute()
-        : await GenericStreamService.mute();
-    setState(() {});
-  }
+  @override
+  void dispose() {
+    // Stop animation controller first
+    _svgaController?.dispose();
 
-  void _toggleCamera() {
-    isCameraOn = !isCameraOn;
-    GenericStreamService.toggleCamera();
-    setState(() {});
-  }
+    // Clean up chat controller
+    _chatController.dispose();
 
-  void _switchCamera() async {
-    isFrontCamera = !isFrontCamera;
-    await GenericStreamService.switchCamera();
-    setState(() {});
+    // Dispose room listener
+    _roomListener.dispose();
+
+    // Unpublish tracks
+    if (_localVideoTrack != null) {
+      _room.localParticipant?.unpublishAllTracks();
+    }
+    if (_localAudioTrack != null) {
+      _room.localParticipant?.unpublishAllTracks();
+    }
+
+    // Disconnect room
+    if (_room.connectionState == ConnectionState.connected) {
+      _room.disconnect();
+    }
+
+    // Stop tracks
+    _localVideoTrack?.stop();
+    _localAudioTrack?.stop();
+
+    // Dispose room last
+    _room.dispose();
+
+    super.dispose();
   }
 
   void _kickUser(String userId) {
@@ -384,151 +924,12 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
     SocketService.instance.unMuteAudience(s);
   }
 
-  void _toggleControlsPanel() {
-    setState(() => showControlsPanel = !showControlsPanel);
-  }
-
-  // void _inviteParticipant() {
-  //   SocketService.instance.getFriends();
-  // }
-
-  void startPreview() async {
-    GenericStreamService.startPreview();
-    await Future.delayed(Duration(milliseconds: 200));
-    // Do something after 200ms
-  }
-
-  Widget buildAndroidPlatformView() {
-    return PlatformViewLink(
-      viewType: 'generic_stream_view',
-      surfaceFactory: (context, controller) {
-        return AndroidViewSurface(
-          controller: controller as AndroidViewController,
-          gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
-          hitTestBehavior: PlatformViewHitTestBehavior.opaque,
-        );
-      },
-      onCreatePlatformView: (params) {
-        return PlatformViewsService.initSurfaceAndroidView(
-            id: params.id,
-            viewType: 'generic_stream_view',
-            layoutDirection: TextDirection.ltr,
-            creationParams: {},
-            creationParamsCodec: const StandardMessageCodec(),
-          )
-          ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
-          ..create();
-      },
-    );
-  }
-
-  Widget _buildStreamGrid() {
-    if (participants.isEmpty) {
-      return buildAndroidPlatformView();
+  void _sendComment() {
+    final msg = _chatController.text.trim();
+    if (msg.isNotEmpty) {
+      SocketService.instance.sendComment(msg);
+      _chatController.clear();
     }
-
-    final String hostId = session.hosts.first.user.id;
-
-    // Host AndroidView (left side)
-    final hostView = Expanded(
-      child: AspectRatio(
-        aspectRatio: 9 / 16,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16.0),
-          child: buildAndroidPlatformView(),
-        ),
-      ),
-    );
-
-    // First non-host participant (right side)
-    final firstParticipant = participants.firstWhere(
-      (p) => p.user.id != hostId,
-    );
-
-    final firstParticipantUser = firstParticipant.user;
-    final firstParticipantId = firstParticipant.user.id;
-
-    final participantVLCView = firstParticipant != null
-        ? Expanded(
-            child: AspectRatio(
-              aspectRatio: 9 / 16,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16.0),
-                child: Utils.getParticipant(
-                  context,
-                  firstParticipantId,
-                  firstParticipantUser,
-                  session.id,
-                ),
-              ),
-            ),
-          )
-        : const Expanded(child: SizedBox.shrink());
-
-    final topRow = Row(children: [hostView, participantVLCView]);
-
-    // Remaining participants after first
-    final remainingParticipants = participants
-        .where((p) => p.user.id != hostId && p != firstParticipant)
-        .take(4)
-        .toList();
-
-    if (remainingParticipants.isNotEmpty) {
-      isParticipantAvail = true;
-    } else {
-      isParticipantAvail = false;
-    }
-
-    // Guest row with up to 4 VLC participants, and empty slots if needed
-    final guestRow = Row(
-      children: List.generate(4, (index) {
-        if (index < remainingParticipants.length) {
-          final userId = remainingParticipants[index].user.id;
-          final UserProfile userProfile = remainingParticipants[index].user;
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(4.0),
-              child: AspectRatio(
-                aspectRatio: 9 / 16,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16.0),
-                  child: Utils.getParticipant(
-                    context,
-                    userId,
-                    userProfile,
-                    session.id,
-                  ),
-                ),
-              ),
-            ),
-          );
-        } else {
-          // Invisible slot (no placeholder)
-          return const Expanded(child: SizedBox.shrink());
-        }
-      }),
-    );
-
-    return Column(
-      children: [
-        topRow,
-        const SizedBox(height: 8),
-        remainingParticipants.isNotEmpty ? guestRow : const SizedBox.shrink(),
-      ],
-    );
-  }
-
-  @override
-  void dispose() {
-    _svgaController?.dispose();
-    _chatController.dispose();
-    participants.clear();
-    viewerCount = 0;
-    if (isStreaming) {
-      GenericStreamService.stopStream();
-      SocketService.instance.leaveLive();
-    }
-    super.dispose();
   }
 
   void showRequestsDialog(BuildContext context) {
@@ -663,6 +1064,25 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    if (!isStreaming) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 20),
+              Text(
+                "Preparing live stream...",
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
@@ -675,7 +1095,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
               child: Align(
                 alignment: const Alignment(0, -1),
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 50),
+                  padding: const EdgeInsets.only(top: 80),
                   child: _buildStreamGrid(),
                 ),
               ),
@@ -796,7 +1216,7 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                       ),
                     ),
 
-                    const SizedBox(width: 6),
+
 
                     /// Name + viewers + list
                     Expanded(
@@ -833,6 +1253,8 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                                   fontSize: 12,
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              _buildConnectionStatus(),
                             ],
                           ),
 
@@ -878,6 +1300,39 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                   ],
                 ),
               ),
+
+              if (_isReconnecting)
+                Positioned(
+                  top: MediaQuery.of(context).size.height * 0.4,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(color: Colors.orange),
+                          const SizedBox(height: 10),
+                          Text(
+                            "Reconnecting... (Attempt $_reconnectAttempts/$_maxReconnectAttempts)",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
 
               if (showCommentList)
                 Positioned(
@@ -944,29 +1399,14 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                             color: Colors.white,
                           ),
                         ),
-                        // IconButton(
-                        //   onPressed: participants.length < 5
-                        //       ? _inviteParticipant
-                        //       : null,
-                        //   icon: const Icon(
-                        //     Icons.group_add,
-                        //     color: Colors.white,
-                        //   ),
-                        //   tooltip: "Add People",
-                        // ),
                         IconButton(
                           onPressed: () {
                             setState(() {
-                              isBeautyEnabled = !isBeautyEnabled;
+                              // isBeautyEnabled = !isBeautyEnabled;
                             });
                             GenericStreamService.toggleBeauty();
                           },
-                          icon: Icon(
-                            isBeautyEnabled
-                                ? Icons.face_retouching_natural
-                                : Icons.face_outlined,
-                            color: Colors.white,
-                          ),
+                          icon: const Icon(Icons.face_retouching_natural),
                         ),
                         Stack(
                           children: [
@@ -1025,11 +1465,12 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                             hintStyle: TextStyle(color: Colors.grey),
                             border: InputBorder.none,
                           ),
-                          onSubmitted: (_) => _sendComment(),
                         ),
                       ),
                       IconButton(
-                        onPressed: _sendComment,
+                        onPressed: () {
+                          _sendComment();
+                        },
                         icon: const Icon(Icons.send, color: Colors.white),
                       ),
                       IconButton(
@@ -1077,17 +1518,6 @@ class _LivePageState extends State<LivePage> with TickerProviderStateMixin {
                           ],
                         ),
                       ),
-
-                      // IconButton(
-                      //   onPressed: _toggleControlsPanel,
-                      //   icon: Icon(
-                      //     showControlsPanel
-                      //         ? Icons.keyboard_arrow_down
-                      //         : Icons.keyboard_arrow_up,
-                      //     color: Colors.white,
-                      //     size: 30,
-                      //   ),
-                      // ),
                     ],
                   ),
                 ),

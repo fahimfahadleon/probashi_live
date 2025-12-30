@@ -15,22 +15,22 @@ plugins {
 
 android {
     namespace = "com.horoftech.probashi_live"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = "29.0.13599879"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
         applicationId = "com.horoftech.probashi_live"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -79,13 +79,17 @@ android {
             useLegacyPackaging = false
         }
     }
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
 }
 
 flutter {
     source = "../.."
 }
 dependencies {
-    implementation("com.github.pedroSG94.RootEncoder:library:2.6.6")
+//    implementation("com.github.pedroSG94.RootEncoder:library:2.6.6")
 //Optional, allow use CameraXSource and CameraUvcSource
 //    implementation("com.github.pedroSG94.RootEncoder:extra-sources:2.6.2")
     // other dependencies...

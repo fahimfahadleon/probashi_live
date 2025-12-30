@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svga/flutter_svga.dart';
 import 'package:probashi_live/models/gift_category.dart';
 import 'package:probashi_live/ui/cached_network_box_image.dart';
 import 'package:probashi_live/utils/api_service.dart';
 import 'package:probashi_live/utils/utils.dart';
 import 'package:probashi_live/utils/variables.dart';
-import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
+
 
 import '../models/gift.dart';
 
 class GiftDialog extends StatefulWidget {
   final void Function(Gift gift)? onGiftClick;
+  final String? name;
 
-  const GiftDialog({super.key, this.onGiftClick});
+
+  const GiftDialog({super.key, this.onGiftClick, this.name});
 
   @override
   State<GiftDialog> createState() => _GiftDialogState();
@@ -107,6 +110,15 @@ class _GiftDialogState extends State<GiftDialog> with TickerProviderStateMixin {
                 children: [
                   const Text(
                     "Gifts",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.purple,
+                    ),
+                  ),
+                  SizedBox(width: 8,),
+                  Text(
+                    "To ${widget.name}",
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

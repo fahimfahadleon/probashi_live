@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svga/flutter_svga.dart';
 import 'package:probashi_live/models/user_profile.dart';
 import 'package:probashi_live/ui/cached_network_box_image.dart';
 
-import 'package:svgaplayer_flutter/parser.dart';
-import 'package:svgaplayer_flutter/player.dart';
+
 
 import '../utils/api_service.dart';
 import '../utils/utils.dart';

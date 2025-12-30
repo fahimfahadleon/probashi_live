@@ -2,7 +2,9 @@
 
 
 import 'package:probashi_live/models/join_request_accepted.dart';
+import 'package:probashi_live/models/live_started_event.dart';
 import 'package:probashi_live/models/user_profile.dart';
+import 'package:probashi_live/models/webrtc_response.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:probashi_live/utils/variables.dart';
 
@@ -267,7 +269,7 @@ class SocketService {
   // Callbacks for various socket events
   // ========================
 
-  void Function(LiveSession liveSession)? _liveStartedCallback;
+  void Function(LiveStartedEvent liveSession)? _liveStartedCallback;
   void Function(LiveSession liveSession)? _liveEndedCallback;
   void Function(LiveSession liveSession)? _sessionUpdatedCallback;
   void Function(LiveComment comment)? _newCommentCallback;
@@ -292,6 +294,11 @@ class SocketService {
   void Function(Map<String, dynamic>)?_onKickAudience;
   void Function(Map<String, dynamic>)?_onMuteAudience;
   void Function(Map<String, dynamic>)?_onUnMuteAudience;
+  void Function(WebRTCResponse)?_onWebRtcData;
+
+  void onWebRTCResponse(void Function(WebRTCResponse rtcResponse) param0){
+    _onWebRtcData = param0;
+  }
 
 
   void onAudienceUnMute(void Function(Map<String, dynamic>) param0) {
@@ -333,7 +340,7 @@ class SocketService {
     _liveInviteCallback = callback;
   }
 
-  void onLiveStarted(void Function(LiveSession liveSession) callback) {
+  void onLiveStarted(void Function(LiveStartedEvent liveSession) callback) {
     _liveStartedCallback = callback;
   }
 
@@ -389,6 +396,7 @@ class SocketService {
 
 
 
+
   // ========================
   // Private Helpers
   // ========================
@@ -402,6 +410,7 @@ class SocketService {
     
     socket.on("live_session_details", (data){
       LiveSession liveSession = LiveSession.fromJson(data);
+      currentSessionId = liveSession.id;
       _getLiveDetails?.call(liveSession);
     });
 
@@ -451,9 +460,10 @@ class SocketService {
     });
 
     socket.on('live_started', (liveSessionJson) {
-      final liveSession = LiveSession.fromJson(liveSessionJson);
-      print('Live started: ${liveSession.id}');
-      cacheLiveSession(liveSession);
+      print(liveSessionJson);
+      final liveSession = LiveStartedEvent.fromJson(liveSessionJson);
+      print('Live started: ${liveSession.fullSession.id}');
+      cacheLiveSession(liveSession.fullSession);
       _liveStartedCallback?.call(liveSession);
     });
 
@@ -555,6 +565,10 @@ class SocketService {
       final history = ChatHistoryResponse.fromJson(data);
       _chatHistoryCallback?.call(history);
     });
+    socket.on('webrtc_token', (data) {
+      _onWebRtcData?.call(WebRTCResponse.fromJson(data));
+    });
+
   }
 
   void cacheLiveSession(LiveSession session) {

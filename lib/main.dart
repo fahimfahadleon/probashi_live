@@ -4,9 +4,10 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:probashi_live/ui/home_page.dart';
 import 'package:probashi_live/ui/social_login_page.dart';
 import 'package:probashi_live/utils/utils.dart';
-
-void main() {
+// import 'package:flutter_webrtc/flutter_webrtc.dart' as webrtc;
+Future<void> main() async {
   initGoogleSignIn();
+ // _initializeAndroidAudioSettings();
   runApp(const MyApp());
 }
 
@@ -89,7 +90,13 @@ Future<void> initGoogleSignIn() async {
     serverClientId: '760404179157-n7akn310nvm9h100he7kikkj09d2ad72.apps.googleusercontent.com',
   );
 }
-
+// Future<void> _initializeAndroidAudioSettings() async {
+//   await webrtc.WebRTC.initialize(options: {
+//     'androidAudioConfiguration': webrtc.AndroidAudioConfiguration.media.toMap()
+//   });
+//   webrtc.Helper.setAndroidAudioConfiguration(
+//       webrtc.AndroidAudioConfiguration.media);
+// }
 
 
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:flutter_svga/flutter_svga.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
@@ -10,8 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:probashi_live/utils/socket_service.dart';
 import 'package:probashi_live/utils/variables.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:svgaplayer_flutter/parser.dart';
-import 'package:svgaplayer_flutter/proto/svga.pb.dart';
+
 
 import '../models/collection_name_request.dart';
 import '../models/friend_user_model.dart';
@@ -259,36 +259,19 @@ class Utils{
     );
   }
 
-
-
-  static Widget getParticipant(BuildContext context,String userID, UserProfile userProfile,String sessionId){
-    return DecoratedParticipantView(
-      streamUrl: "${Variables.RTMP_URL}/$userID",
-      avatarUrl: userProfile.profilePic,
-      liveUser: userProfile,
-      onProfileTap:() async {
-        UserStats stats = await ApiService.getApiClient()
-            .getUserStats(userID);
-        UserProfile profile = await ApiService.getApiClient()
-            .getUserProfile(userID);
-        profile.stats = stats;
-        Utils.showMiniProfileDialog(userProfile: profile, context: context);
-      } ,
-      onGiftTap: (){
-        Utils.showGiftDialog(context,userID,sessionId);
-      },
-      overlayText: userProfile.name,
-    );
+  static Future<void> updateProfile() async {
+    UserProfile profile = await ApiService.getApiClient().getMyProfile();
+    Variables.currentUser = profile;
   }
 
-
-
-  static void showGiftDialog(BuildContext context,String toUserId, String sessionId) {
+  static void showGiftDialog(BuildContext context,String name, String toUserId, String sessionId,Function(Gift,String)? onGiftSent,) {
     showDialog(
       context: context,
       builder: (_) => GiftDialog(
+        name: name,
         onGiftClick: (gift) {
           _sendGift(gift, toUserId,sessionId);
+          onGiftSent?.call(gift,toUserId);
         },
       ),
     );
@@ -302,6 +285,7 @@ class Utils{
       giftId: gift.id,
     );
     SocketService.instance.sendGift(liveGift);
+    updateProfile();
   }
 
   static String getActiveCollectionId(Map<String,dynamic>map, String activeCollection){

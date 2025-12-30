@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:svgaplayer_flutter/player.dart';
-import 'package:svgaplayer_flutter/proto/svga.pb.dart';
+import 'package:flutter_svga/flutter_svga.dart';
+
 
 import '../utils/utils.dart';
 
